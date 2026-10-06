@@ -50,3 +50,9 @@ Known limitations
   inlines one of them, its event stops firing. The log shows ``PATCH LIVE`` for every hook that has
   fired at least once.
 * The window's sidebar does not scroll; it fits about twenty items.
+* Played flat (no headset), a window whose page holds only text or a table may not appear when it is
+  opened in front of the player (``Window.Open()`` with no anchor). Windows opened from the main menu,
+  and settings pages, are not affected. Under investigation.
+* Tested against the game build before the October 7, 2026 update (security and networking for
+  public lobbies). Check the log for ``PATCH LIVE`` lines after updating the game; report any hook
+  that stops firing.

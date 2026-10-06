@@ -36,11 +36,9 @@ jobs:
           path: docs/_build/html
           if-no-files-found: error
 
-  # Publishing to GitHub Pages is written but off. To turn it on: enable Pages (source: GitHub
-  # Actions) in the repo settings, then change `if: false` below to
-  # `if: github.ref == 'refs/heads/main'`.
+  # Publishes the site to GitHub Pages from main (Pages source: GitHub Actions).
   pages:
-    if: false
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: docs
     runs-on: ubuntu-latest
     permissions:

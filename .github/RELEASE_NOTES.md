@@ -7,3 +7,7 @@ The shared modding API for IRONSTRIKE.
 **For modders:** reference `IronstrikeApi.dll` (the zip includes `IronstrikeApi.xml`, so your IDE shows the docs) and add `[BepInDependency("eu.euroswarms.ironstrike.api")]`. The docs site is built by CI (the `docs-html` artifact); start with the tutorial.
 
 Public matchmaking is locked while the API is loaded, as the game's developer asked. Gameplay changes made through the API apply only in solo games, private matches and modded servers.
+
+**Known issues:** verified against the game build before the October 7, 2026 update; re-checking against the new build is pending. Played flat, a mod window whose page is only text or a table may not appear when opened in front of the player (menu-opened windows and settings pages are fine).
+
+**Docs:** https://ilumci.github.io/ironstrike-api/
