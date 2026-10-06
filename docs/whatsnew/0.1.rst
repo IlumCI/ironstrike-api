@@ -1,0 +1,52 @@
+***************************
+  What's New In the API 0.1
+***************************
+
+:Release: |release|
+:Date: October 2026
+
+This is the first release. It collects what the `Ironstrike Trainer
+<https://github.com/IlumCI/ironstrike-trainer>`_ and `Ironstrike Servers
+<https://github.com/IlumCI/ironstrike-servers>`_ each had to work out for themselves, and turns it into
+one library that every mod can depend on.
+
+Summary -- release highlights
+=============================
+
+* **One dependency for every mod.** Add ``[BepInDependency(ModApi.Guid)]`` and reference
+  ``IronstrikeApi.dll``. See :ref:`tut-firstmod`.
+* **Game events.** Runs, levels, encounters, scenes, sessions, players, hits, deaths and projectiles
+  as plain C# events (:cs:type:`~IronstrikeApi.GameEvents`).
+* **Gameplay helpers.** Stat modifiers that stack between mods (:cs:type:`~IronstrikeApi.Gameplay.Stats`),
+  editable damage (:cs:type:`~IronstrikeApi.Gameplay.DamageEvent`), status effects, skills, weapon
+  sets and bots.
+* **A window toolkit.** :cs:type:`~IronstrikeApi.Ui.Window` and :cs:type:`~IronstrikeApi.Ui.Page`
+  draw a classic-Steam-style window that works in VR and flat, with check boxes, steppers, pickers,
+  tables and the game's own keyboard for text.
+* **The Mods window.** Every loaded mod, its version, what it needs, and a page of its settings,
+  built from its BepInEx config with no code. A **MODS** button on the main menu's Credits card, or
+  :kbd:`F8`.
+* **Mod-to-mod networking.** Named channels over the game's own connection
+  (:cs:type:`~IronstrikeApi.ModNet`), relayed through the host. Players without the API never get
+  mod traffic.
+* **The rule, enforced once.** Public matchmaking is locked while the API is loaded, and gameplay
+  changes made through the API only apply in solo, private matches and modded servers
+  (:cs:type:`~IronstrikeApi.Safety`).
+
+Compatibility
+=============
+
+* Needs BepInEx 6 IL2CPP **be.788** and the Steam build of IRONSTRIKE (Unity 2021.3.28f1).
+* Ironstrike Trainer 1.0.3 and Ironstrike Servers 0.1.0 work alongside the API unchanged. They do
+  not use it yet; moving them onto it is planned.
+* Installing the API changes the mod-set fingerprint (:cs:prop:`~IronstrikeApi.Mods.Hash`), so
+  everyone on a modded server needs it, or nobody.
+
+Known limitations
+=================
+
+* :cs:event:`~IronstrikeApi.GameEvents.PlayerJoined` is reliable on the host only.
+* Encounter, win/lose and death events come from hooks on the game's own methods; if a game update
+  inlines one of them, its event stops firing. The log shows ``PATCH LIVE`` for every hook that has
+  fired at least once.
+* The window's sidebar does not scroll; it fits about twenty items.

@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+{%- block htmltitle -%}
+<title>{{ shorttitle }}</title>
+{%- endblock -%}
+{% block body %}
+  <h1>{{ project }} {{ release }} documentation</h1>
+  <p>Welcome! This is the documentation for the {{ project }} {{ release }}, the shared library that
+  IRONSTRIKE mods are built on.</p>
+  <p><strong>Parts of the documentation:</strong></p>
+  <table class="contentstable" align="center"><tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("whatsnew/" + version) }}">What's new in {{ version }}?</a><br/>
+         <span class="linkdescr">or <a href="{{ pathto("whatsnew/index") }}">all "What's new" documents</a></span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("tutorial/index") }}">Tutorial</a><br/>
+         <span class="linkdescr">start here: install, then your first mod</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("reference/index") }}">API reference</a><br/>
+         <span class="linkdescr">every type, member and event, in detail</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("howto/index") }}">How-to guides</a><br/>
+         <span class="linkdescr">in-depth recipes for specific jobs</span></p>
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("internals/index") }}">Game internals</a><br/>
+         <span class="linkdescr">what is known about IRONSTRIKE's own code</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("howto/safety") }}">Rules for modders</a><br/>
+         <span class="linkdescr">private games only, and why</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("howto/il2cpp") }}">IL2CPP and Harmony pitfalls</a><br/>
+         <span class="linkdescr">the traps that cost hours, collected</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("faq") }}">FAQ</a><br/>
+         <span class="linkdescr">frequently asked questions (with answers!)</span></p>
+    </td></tr>
+  </table>
+
+  <p><strong>Indices, glossary, and search:</strong></p>
+  <table class="contentstable" align="center"><tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("reference/api/index") }}">Types by namespace</a><br/>
+         <span class="linkdescr">every public type, at a glance</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("genindex") }}">General index</a><br/>
+         <span class="linkdescr">all functions, classes, and terms</span></p>
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("glossary") }}">Glossary</a><br/>
+         <span class="linkdescr">the most important terms explained</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("search") }}">Search page</a><br/>
+         <span class="linkdescr">search this documentation</span></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("contents") }}">Complete table of contents</a><br/>
+         <span class="linkdescr">lists all sections and subsections</span></p>
+    </td></tr>
+  </table>
+
+  <p><strong>Project information:</strong></p>
+  <table class="contentstable" align="center"><tr>
+    <td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("bugs") }}">Reporting issues</a></p>
+      <p class="biglink"><a class="biglink" href="{{ pathto("about") }}">About the documentation</a></p>
+    </td><td width="50%">
+      <p class="biglink"><a class="biglink" href="{{ pathto("license") }}">History and license</a></p>
+      <p class="biglink"><a class="biglink" href="https://github.com/IlumCI/ironstrike-api">Source code</a></p>
+    </td></tr>
+  </table>
+{% endblock %}

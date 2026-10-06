@@ -1,0 +1,10 @@
+/* Front-page tables, as on docs.python.org. */
+table.contentstable { width: 90%; margin-left: auto; margin-right: auto; }
+table.contentstable p.biglink { line-height: 150%; }
+a.biglink { font-size: 1.3em; }
+span.linkdescr { font-style: italic; padding-top: 5px; font-size: 90%; }
+
+/* C# signatures: keep long ones readable. */
+dl.cs dt.sig { font-family: var(--code-font, monospace); white-space: normal; }
+dl.cs dt .sig-name { font-weight: bold; }
+dl.cs dt .k, dl.cs dt .kt { color: #0b6e99; }

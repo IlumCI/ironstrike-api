@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+
+      - name: Build the API
+        run: dotnet build IronstrikeApi/IronstrikeApi.csproj -c Release --nologo
+
+      # The example is the contract: if it stops compiling, a public API changed under mods.
+      - name: Build the example mod
+        run: dotnet build examples/HelloMod/HelloMod.csproj -c Release --nologo
+
+      - name: Package
+        run: ./package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IronstrikeApi
+          path: dist/*.zip
+          if-no-files-found: error

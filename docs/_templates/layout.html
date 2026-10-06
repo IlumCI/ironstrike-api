@@ -1,0 +1,22 @@
+{% extends "!layout.html" %}
+{#- The theme's footer carries the Python Software Foundation's license and donation lines, which do
+    not apply here. Same layout, this project's terms. -#}
+{% block footer %}
+    <div class="footer">
+    &copy; {{ copyright|e }}.
+    <br>
+    {% if theme_license_url %}
+      See <a href="{{ pathto('license') }}">History and license</a> for more information.<br>
+    {% endif %}
+    IRONSTRIKE is a game by E McNeill; this project is not affiliated with or endorsed by its developer.
+    <br><br>
+    {%- if last_updated %}
+      Last updated on {{ last_updated|e }}.
+    {%- endif %}
+    {% if theme_issues_url %}
+      <a href="{{ theme_issues_url }}">Found a bug</a>?
+    {% endif %}
+    <br>
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> {{ sphinx_version|e }}.
+    </div>
+{% endblock %}
