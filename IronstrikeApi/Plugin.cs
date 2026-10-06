@@ -59,6 +59,7 @@ public class Plugin : BasePlugin
 
         Ui.ModsWindow.Register();
         Core.SelfTest.Register();
+        Core.StressTest.Register();
         Log.LogInfo($"{ModApi.Name} v{ModApi.Version} loaded.");
     }
 }
@@ -67,7 +68,7 @@ internal sealed class Cfg
 {
     public readonly ConfigEntry<bool> EnableHotkeys, MenuButton;
     public readonly ConfigEntry<float> AutoOpenAfter;
-    public readonly ConfigEntry<bool> SelfTest, LogEvents;
+    public readonly ConfigEntry<bool> SelfTest, StressTest, LogEvents;
 
     public Cfg(ConfigFile f)
     {
@@ -80,6 +81,9 @@ internal sealed class Cfg
         SelfTest = f.Bind("09 Debug", "SelfTest", false, new ConfigDescription(
             "Debug aid: exercise the API's hooks without input (solo run, bots, a loopback message).\n"
             + "Turn off afterwards.", null, ModSettings.Hidden));
+        StressTest = f.Bind("09 Debug", "StressTest", false, new ConfigDescription(
+            "Debug aid: run the in-game edge-case suite (windows, controls, hooks, a scene change, damage).\n"
+            + "Logs 'stress: PASS/FAIL' per case. Turn off afterwards.", null, ModSettings.Hidden));
         LogEvents = f.Bind("09 Debug", "LogEvents", false,
             "Debug aid: log every API event as it fires (no names, codes or ids).");
     }

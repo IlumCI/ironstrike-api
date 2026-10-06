@@ -45,19 +45,23 @@ internal static class Driver
             catch (Exception e)
             {
                 nextSlow = now + 10f;
-                Plugin.Log.LogError($"menu upkeep: {e}");
+                Diag.Error($"menu upkeep: {e}");
             }
         }
 
         if (Plugin.C.EnableHotkeys.Value && !hotkeysOff) Hotkeys();
         MaybeAutoOpen(now);
         SelfTest.Tick(now);
+        StressTest.Tick(now);
     }
 
+    static readonly System.Collections.Generic.HashSet<string> failedSteps = new();
+
+    // One error per kind of failure: these run every frame.
     static void Step(Action a, string what)
     {
         try { a(); }
-        catch (Exception e) { ApiLog.WarnOnce(null, "tick:" + what, $"{what}: {e}"); }
+        catch (Exception e) { if (failedSteps.Add(what + e.GetType().Name)) Diag.Error($"{what}: {e}"); }
     }
 
     static void MaybeAutoOpen(float now)

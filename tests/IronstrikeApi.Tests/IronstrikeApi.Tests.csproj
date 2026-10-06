@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Stress and edge-case tests for the parts of the API that do not need the game running:
+       the network protocol (against a simulated network), the stat engine, event dispatch, the
+       settings generator, session classification and the mod-set hash.
+       The game's interop assemblies are loaded only as type definitions; nothing here may touch
+       an Il2Cpp object, because there is no IL2CPP runtime outside the game. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RollForward>LatestMajor</RollForward>
+    <NoWarn>$(NoWarn);NU1603</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.788" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../IronstrikeApi/IronstrikeApi.csproj" />
+    <Reference Include="../../refs/GameAssembly.dll" />
+    <Reference Include="../../refs/Fusion.Runtime.dll" />
+    <Reference Include="../../refs/Il2Cppmscorlib.dll" />
+    <Reference Include="../../refs/UnityEngine.CoreModule.dll" />
+  </ItemGroup>
+
+</Project>

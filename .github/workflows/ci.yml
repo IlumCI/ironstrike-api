@@ -25,6 +25,10 @@ jobs:
       - name: Build the example mod
         run: dotnet build examples/HelloMod/HelloMod.csproj -c Release --nologo
 
+      # Protocol, stat engine, dispatch, settings and session edge cases; no game needed.
+      - name: Stress and edge-case tests
+        run: dotnet test tests/IronstrikeApi.Tests -c Release --nologo
+
       - name: Package
         run: ./package.sh
 

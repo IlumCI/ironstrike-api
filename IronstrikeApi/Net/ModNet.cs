@@ -4,6 +4,7 @@ using System.Text;
 using Fusion;
 using HarmonyLib;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using IronstrikeApi.Net;
 
 namespace IronstrikeApi;
 
@@ -32,8 +33,6 @@ public sealed class NetMessage
 public sealed class NetChannel
 {
     internal uint Id;
-    internal int SentThisSecond;
-    internal float SecondStart;
 
     /// <summary>The channel's name, e.g. <c>"mymod.sync"</c>.</summary>
     public string Name { get; internal set; }
@@ -88,23 +87,32 @@ public sealed class NetChannel
 public static class ModNet
 {
     /// <summary>The largest payload a message may carry, in bytes.</summary>
-    public const int MaxPayload = 16 * 1024;
+    public const int MaxPayload = NetCore.MaxPayload;
 
     /// <summary>How many messages a channel may send per second.</summary>
-    public const int MaxPerSecond = 30;
+    public const int MaxPerSecond = NetCore.MaxPerSecond;
 
-    internal const int ToAll = -1, ToHost = -2;
-
-    // "ISMA" | version | type | channel id (4) | origin (4) | target (4) | payload
-    static readonly byte[] Magic = { (byte)'I', (byte)'S', (byte)'M', (byte)'A' };
-    const byte Version = 1;
-    const byte THello = 1, TData = 2;
-    const int Header = 4 + 1 + 1 + 4 + 4 + 4;
+    internal const int ToAll = NetCore.ToAll, ToHost = NetCore.ToHost;
 
     static readonly Dictionary<uint, NetChannel> channels = new();
-    static readonly HashSet<int> greeted = new();       // host: clients that greeted back
-    static readonly Dictionary<int, float> greetAt = new(); // host: when to re-greet a client
-    static bool hostGreeted;                              // client: the host greeted us
+    internal static readonly NetCore Core = new()
+    {
+        Clock = () => UnityEngine.Time.realtimeSinceStartup,
+        Allowed = () => Allowed,
+        HasChannel = id => channels.ContainsKey(id),
+        Info = s => Plugin.Log.LogInfo(s),
+        Warn = s => ApiLog.WarnOnce(null, "net:" + s, s),
+    };
+
+    static ModNet()
+    {
+        Core.Deliver = (chId, origin, fromHost, payload) =>
+        {
+            if (!channels.TryGetValue(chId, out var ch)) return;
+            ch.Raise(new NetMessage { Channel = ch, Data = payload, Sender = transport.Ref(origin), FromHost = fromHost });
+        };
+        Core.PeerReady = id => Safe.Run(PeerReady, "PeerReady", transport.Ref(id));
+    }
 
     /// <summary>
     /// Gets (or creates) the channel with this name. Use a name prefixed with your mod, like
@@ -114,7 +122,7 @@ public static class ModNet
     public static NetChannel Channel(string name)
     {
         if (string.IsNullOrEmpty(name)) throw new ArgumentException("channel name is empty", nameof(name));
-        uint id = Fnv(name);
+        uint id = NetCore.Fnv(name);
         if (channels.TryGetValue(id, out var c))
         {
             if (c.Name != name) throw new ArgumentException($"channel '{name}' collides with '{c.Name}'; pick another name");
@@ -131,126 +139,42 @@ public static class ModNet
     public static event Action<PlayerRef> PeerReady;
 
     /// <summary>True when there is a session with at least one other player running the API.</summary>
-    public static bool Connected => Allowed && (Game.IsHost ? greeted.Count > 0 : hostGreeted);
+    public static bool Connected => Allowed && PeerCount > 0;
 
     /// <summary>
     /// How many other players are known to run the API: on the host, the clients that greeted back;
     /// on a client, 1 once the host has greeted it.
     /// </summary>
-    public static int PeerCount => Game.IsHost ? greeted.Count : hostGreeted ? 1 : 0;
+    public static int PeerCount => Core.PeerCount(transport.Bind());
 
     static bool Allowed => Safety.Context is PlayContext.PrivateMatch or PlayContext.ModdedServer or PlayContext.Solo;
 
-    // ------------------------------------------------------------------ sending
-
     internal static bool Send(NetChannel ch, int target, byte[] data)
     {
-        data ??= Array.Empty<byte>();
-        if (!Allowed) { ApiLog.WarnOnce(null, "net:ctx:" + Safety.Context, $"mod messages are off in {Safety.Context} games"); return false; }
-        if (data.Length > MaxPayload) { ApiLog.WarnOnce(null, "net:size:" + ch.Name, $"{ch.Name}: message over {MaxPayload} bytes dropped"); return false; }
-        if (!RateOk(ch)) { ApiLog.WarnOnce(null, "net:rate:" + ch.Name, $"{ch.Name}: over {MaxPerSecond} messages/s, dropping"); return false; }
-
-        var r = Game.Runner;
-        if (r == null || !r.IsRunning) return false;
-        int self = r.LocalPlayer.RawEncoded;
-        var packet = Build(TData, ch.Id, self, target, data);
-
-        if (r.IsServer)
+        var r = Core.Send(transport.Bind(), ch.Id, target, data);
+        switch (r)
         {
-            if (target == ToHost || target == self) return false;
-            int n = 0;
-            foreach (var p in Active(r))
-            {
-                int id = p.RawEncoded;
-                if (id == self || !greeted.Contains(id)) continue;
-                if (target != ToAll && id != target) continue;
-                r.SendReliableDataToPlayer(p, packet);
-                n++;
-            }
-            return n > 0;
+            case NetCore.SendResult.NotAllowed:
+                ApiLog.WarnOnce(null, "net:ctx:" + Safety.Context, $"mod messages are off in {Safety.Context} games"); break;
+            case NetCore.SendResult.TooBig:
+                ApiLog.WarnOnce(null, "net:size:" + ch.Name, $"{ch.Name}: message over {MaxPayload} bytes dropped"); break;
+            case NetCore.SendResult.RateLimited:
+                ApiLog.WarnOnce(null, "net:rate:" + ch.Name, $"{ch.Name}: over {MaxPerSecond} messages/s, dropping"); break;
         }
-
-        if (!hostGreeted) return false;
-        r.SendReliableDataToServer(packet);
-        return true;
+        return r == NetCore.SendResult.Sent;
     }
-
-    static bool RateOk(NetChannel ch)
-    {
-        float now = UnityEngine.Time.realtimeSinceStartup;
-        if (now - ch.SecondStart >= 1f) { ch.SecondStart = now; ch.SentThisSecond = 0; }
-        return ++ch.SentThisSecond <= MaxPerSecond;
-    }
-
-    static Il2CppStructArray<byte> Build(byte type, uint channel, int origin, int target, byte[] payload)
-    {
-        var b = new byte[Header + payload.Length];
-        Buffer.BlockCopy(Magic, 0, b, 0, 4);
-        b[4] = Version;
-        b[5] = type;
-        BitConverter.TryWriteBytes(new Span<byte>(b, 6, 4), channel);
-        BitConverter.TryWriteBytes(new Span<byte>(b, 10, 4), origin);
-        BitConverter.TryWriteBytes(new Span<byte>(b, 14, 4), target);
-        Buffer.BlockCopy(payload, 0, b, Header, payload.Length);
-        return b;
-    }
-
-    static void Greet(NetworkRunner r, PlayerRef p)
-    {
-        try { r.SendReliableDataToPlayer(p, Build(THello, 0, r.LocalPlayer.RawEncoded, p.RawEncoded, Array.Empty<byte>())); }
-        catch (Exception e) { ApiLog.WarnOnce(null, "net:greet", $"could not greet a player: {e.Message}"); }
-    }
-
-    // ------------------------------------------------------------------ session plumbing
 
     internal static void OnPlayerJoined(NetworkRunner r, PlayerRef p)
     {
-        if (!Allowed || r == null || !r.IsServer || p == r.LocalPlayer) return;
-        greetAt[p.RawEncoded] = UnityEngine.Time.realtimeSinceStartup;   // greeted from Tick
+        if (!Allowed) return;
+        Core.PlayerJoined(transport.Bind(), p.RawEncoded);
     }
 
-    internal static void OnPlayerLeft(PlayerRef p)
-    {
-        greeted.Remove(p.RawEncoded);
-        greetAt.Remove(p.RawEncoded);
-    }
+    internal static void OnPlayerLeft(PlayerRef p) => Core.PlayerLeft(p.RawEncoded);
 
-    internal static void Reset()
-    {
-        greeted.Clear();
-        greetAt.Clear();
-        hostGreeted = false;
-        hostId = int.MinValue;
-        tries.Clear();
-    }
+    internal static void Reset() => Core.Reset();
 
-    // The host greets new clients, and again every few seconds for half a minute in case the first
-    // greeting went out before the client was listening.
-    const float GreetEvery = 3f;
-    const int GreetTries = 10;
-    static readonly Dictionary<int, int> tries = new();
-
-    internal static void Tick()
-    {
-        if (greetAt.Count == 0) return;
-        var r = Game.Runner;
-        if (r == null || !r.IsRunning || !r.IsServer || !Allowed) return;
-        float now = UnityEngine.Time.realtimeSinceStartup;
-        foreach (var p in Active(r))
-        {
-            int id = p.RawEncoded;
-            if (!greetAt.TryGetValue(id, out float at) || now < at) continue;
-            tries.TryGetValue(id, out int n);
-            if (greeted.Contains(id) || n >= GreetTries) { greetAt.Remove(id); tries.Remove(id); continue; }
-            tries[id] = n + 1;
-            greetAt[id] = now + GreetEvery;
-            Greet(r, p);
-        }
-    }
-
-    // ------------------------------------------------------------------ receiving
-
-    static int dropped;
+    internal static void Tick() => Core.Tick(transport.Bind());
 
     // NetworkRunner's own receive path, before the data is handed to the game's callbacks (whose
     // OnReliableDataReceived is empty). Packets that are ours stop here; anything else goes on.
@@ -259,106 +183,51 @@ public static class ModNet
     static bool Receive(NetworkRunner __instance, PlayerRef player, Il2CppStructArray<byte> dataArray)
     {
         Events.Hooks.Live("NetworkRunner.OnReliableData");
-        if (dataArray == null || dataArray.Length < Header) return true;
+        if (dataArray == null || dataArray.Length < 4) return true;
         byte[] b = dataArray;
-        if (b[0] != Magic[0] || b[1] != Magic[1] || b[2] != Magic[2] || b[3] != Magic[3]) return true;
-
-        try { Handle(__instance, player, b); }
-        catch (Exception e) { ApiLog.WarnOnce(null, "net:recv:" + e.GetType().Name, $"bad mod message dropped: {e.Message}"); }
-        return false;
+        if (!NetCore.IsOurs(b)) return true;
+        var t = transport.Bind(__instance);
+        return !Core.Receive(t, player.RawEncoded, b);
     }
 
-    static void Handle(NetworkRunner r, PlayerRef from, byte[] b)
-    {
-        if (b[4] != Version || !Allowed) { dropped++; return; }
-        byte type = b[5];
-        uint chId = BitConverter.ToUInt32(b, 6);
-        int origin = BitConverter.ToInt32(b, 10);
-        int target = BitConverter.ToInt32(b, 14);
+    internal static uint Fnv(string s) => NetCore.Fnv(s);
 
-        if (type == THello)
+    // ------------------------------------------------------------------ the Fusion transport
+
+    static readonly RunnerTransport transport = new();
+
+    sealed class RunnerTransport : INetTransport
+    {
+        NetworkRunner runner;
+        readonly List<PlayerRef> refs = new();
+        readonly List<int> ids = new();
+
+        // The current session's runner, or null when there is none (sending then fails cleanly).
+        public RunnerTransport Bind(NetworkRunner r = null)
         {
-            if (r.IsServer)
+            runner = r ?? Game.Runner;
+            refs.Clear(); ids.Clear();
+            if (runner == null || !runner.IsRunning) { runner = null; return null; }
+            // ActivePlayers is an Il2Cpp IEnumerable, which C#'s foreach cannot walk directly.
+            var e = runner.ActivePlayers?.GetEnumerator();
+            if (e != null)
             {
-                if (greeted.Add(from.RawEncoded))
-                {
-                    Plugin.Log.LogInfo($"mod messages: player #{from.PlayerId} has the API");
-                    Safe.Run(PeerReady, "PeerReady", from);
-                }
+                var it = e.Cast<Il2CppSystem.Collections.IEnumerator>();
+                while (it.MoveNext()) { refs.Add(e.Current); ids.Add(e.Current.RawEncoded); }
             }
-            else if (!hostGreeted)
-            {
-                hostGreeted = true;
-                hostId = origin;
-                Plugin.Log.LogInfo("mod messages: the host has the API");
-                r.SendReliableDataToServer(Build(THello, 0, r.LocalPlayer.RawEncoded, ToHost, Array.Empty<byte>()));
-                Safe.Run(PeerReady, "PeerReady", from);
-            }
-            return;
-        }
-        if (type != TData) { dropped++; return; }
-
-        var payload = new byte[b.Length - Header];
-        Buffer.BlockCopy(b, Header, payload, 0, payload.Length);
-
-        if (r.IsServer)
-        {
-            // Never trust a client's claimed origin: it is the connection it came in on.
-            origin = from.RawEncoded;
-            if (!greeted.Contains(origin)) { dropped++; return; }
-            int self = r.LocalPlayer.RawEncoded;
-            if (target == ToAll || (target != ToHost && target != self)) Relay(r, chId, origin, target, payload);
-            if (target != ToAll && target != ToHost && target != self) return;   // for someone else
+            return this;
         }
 
-        if (!channels.TryGetValue(chId, out var ch)) { dropped++; return; }
-        ch.Raise(new NetMessage
+        public PlayerRef Ref(int id)
         {
-            Channel = ch,
-            Data = payload,
-            Sender = Find(r, origin),
-            FromHost = !r.IsServer && origin == HostId(r),
-        });
-    }
-
-    static void Relay(NetworkRunner r, uint chId, int origin, int target, byte[] payload)
-    {
-        var packet = Build(TData, chId, origin, target, payload);
-        int self = r.LocalPlayer.RawEncoded;
-        foreach (var p in Active(r))
-        {
-            int id = p.RawEncoded;
-            if (id == self || id == origin || !greeted.Contains(id)) continue;
-            if (target != ToAll && id != target) continue;
-            r.SendReliableDataToPlayer(p, packet);
+            for (int i = 0; i < ids.Count; i++) if (ids[i] == id) return refs[i];
+            return PlayerRef.None;
         }
-    }
 
-    static PlayerRef Find(NetworkRunner r, int raw)
-    {
-        foreach (var p in Active(r)) if (p.RawEncoded == raw) return p;
-        return PlayerRef.None;
-    }
-
-    // Client side: the host's player id, learned from its greeting (which carries the sender's own id).
-    static int hostId = int.MinValue;
-    static int HostId(NetworkRunner r) => hostId;
-
-    // ActivePlayers is an Il2Cpp IEnumerable, which C#'s foreach cannot walk directly.
-    static List<PlayerRef> Active(NetworkRunner r)
-    {
-        var list = new List<PlayerRef>();
-        var e = r.ActivePlayers?.GetEnumerator();
-        if (e == null) return list;
-        var it = e.Cast<Il2CppSystem.Collections.IEnumerator>();
-        while (it.MoveNext()) list.Add(e.Current);
-        return list;
-    }
-
-    internal static uint Fnv(string s)
-    {
-        uint h = 2166136261;
-        foreach (byte c in Encoding.UTF8.GetBytes(s)) { h ^= c; h *= 16777619; }
-        return h;
+        public bool IsServer => runner.IsServer;
+        public int LocalId => runner.LocalPlayer.RawEncoded;
+        public IReadOnlyList<int> Players => ids;
+        public void SendToPlayer(int id, byte[] packet) => runner.SendReliableDataToPlayer(Ref(id), packet);
+        public void SendToServer(byte[] packet) => runner.SendReliableDataToServer(packet);
     }
 }

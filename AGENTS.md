@@ -171,7 +171,95 @@ pip install -r docs/requirements.txt
 - **The first start shows a "Safety Warning" notice in the boot scene, and the haven waits for its
   OK.**
 
+## 9b. Stress testing
+
+Two suites. Run both after any change to the areas they cover.
+
+**`tests/IronstrikeApi.Tests`** (xunit, in CI, no game needed): `dotnet test tests/IronstrikeApi.Tests`.
+- `NetTests` run `NetCore` against a simulated session:
+  - drop, duplication and reordering
+  - vanilla peers
+  - spoofed origins
+  - 5000 fuzzed packets
+  - floods (the host relays at most `MaxInPerSecond` per sender)
+  - payload and rate limits
+  - id reuse, including when the leave callback was missed
+  - a throwing transport
+- `CoreTests` cover:
+  - the stat engine: order, mid-pass add/remove, throwing modifiers, NaN, the recursion guard,
+    10k modifiers with no allocation
+  - dispatch under failure, and the global error-report cap
+  - the session-classification table
+  - the mod-hash vectors against Servers' formula
+  - redaction
+  - the settings classifier on odd types: byte/uint/decimal, exact long, `[Flags]`, undefined enum
+    values, int lists, markup
+
+The game-independent cores exist for these tests: `NetCore`, `StatEngine`, `SessionHooks.Classify`
+and `ModSettings.Classify`/`TrySet`. Keep logic there. Do not touch Il2Cpp objects in them, and use
+`is null`, not `== null`, on game objects: Unity's operator calls into the engine.
+
+**`[09 Debug] StressTest`** (in the game; logs `stress: PASS/FAIL`, ends with `stress: DONE n passed, m failed`):
+- **Windows:**
+  - re-entrancy
+  - a throwing render
+  - huge pages, and table size against rendering
+  - an open/close storm
+  - fuzz-clicking every control, stale and throwing ones included
+- **Settings:** a config full of awkward entries, fuzz-clicked, then re-validated.
+- **Keyboard:** concurrency, and the keyboard being closed behind our back.
+- **Load:** 2000 Update handlers (500 throwing), and 2000 stat modifiers gated by context.
+- **Hooks and menu:** fuzzed packets through the real receive hook, menu pills.
+- **Session:** a scene change under an open window, damage handlers in a real fight, and leaving the
+  run.
+
+Bugs these found and fixed:
+- **Windows:**
+  - A render that refreshed itself overflowed the stack.
+  - Windows survived level loads and floated where the player used to be: the base scene persists,
+    and they now close on scene change.
+- **Keyboard:** `TextInput` lost track of the keyboard. `menuOpen` only turns on after the opening
+  animation, and `Hide()` keeps the GameObject active.
+- **Settings:**
+  - `[Flags]` and undefined enum values were silently rewritten.
+  - Exact `long` values were lost; their bounds now use decimal, because `long.MaxValue` as a double
+    overflows.
+  - Config text was parsed as markup.
+- **Networking:**
+  - The host had no receive-side limits.
+  - A lost greeting reply stranded a client.
+  - Stale peer ids were kept.
+- **Logging:**
+  - 500 throwing handlers could write 2500 error lines.
+  - Errors before the plugin loaded could throw.
+
+Facts learned:
+- `MoveSpeed` reaches the hook as 0, a bonus value; use `Stats.Scale`.
+- Flat under Proton, `Main Camera` is the only camera.
+
 ## 10. Open work
+
+- **A game update (security and networking, public lobbies) was released on 2026-10-07, mid-work.**
+  Everything in this file was verified against the build before it. After updating:
+  - Regenerate `refs/` from the game's new `BepInEx/interop`.
+  - Re-run the unit tests and the `[09 Debug] StressTest` suite.
+  - Re-check every `PATCH LIVE` line: signatures, inlining, `NetworkRunner.StartGame`, the
+    reliable-data receive method, the PressPlay/PressHost/matchmaking lockout.
+  - Re-check the Servers mod's lobby and token handling.
+- **Unsolved: some windows opened in front of the camera do not render, flat under Proton.**
+  - **What fails:** text-only pages and tables, opened with `Window.Open()` and no anchor, at any
+    time in the haven.
+  - **What renders,** at the identical position, with the same camera and the same canvas state
+    (active, nothing culled, alpha 1): settings pages and the Mods window, at the menu anchor and in
+    a level.
+  - **Ruled out:**
+    - the vertex count (50 rows fail too)
+    - timing (0-200 s)
+    - a Unity error
+    - the camera choice (only `Main Camera` exists)
+  - **Next step:** the A/B probes at the top of `StressTest.Build()` (settings vs header vs info vs
+    text) were about to answer which content matters; they are still in the suite. Check VR too:
+    there the camera is the headset and this may not occur.
 
 - Not yet seen firing:
   - `EncounterCompleted`

@@ -46,6 +46,9 @@ public sealed class Window
     readonly List<Tab> tabs = new();
     Func<IReadOnlyList<string>> sidebar;
     float lastRender;
+    int sideOffset;
+    static bool rendering;      // a render (of any window) is in progress
+    static bool pending;        // a redraw was asked for during it
 
     /// <summary>The window that is open (or was last opened), or null.</summary>
     public static Window Current { get; private set; }
@@ -106,7 +109,7 @@ public sealed class Window
         Current = this;
         Panel.OnBack = Close;
         Panel.Show(beside, keepPlace: wasOpen);
-        Render(false);
+        Redraw(false);
     }
 
     /// <summary>Hides the window.</summary>
@@ -127,7 +130,18 @@ public sealed class Window
     /// <summary>Rebuilds the page from the render callback, keeping the scroll position.</summary>
     public void Refresh()
     {
-        if (IsOpen) Render(true);
+        if (IsOpen) Redraw(true);
+    }
+
+    // A render callback that calls Refresh or Open (directly, or through a control it fires) would
+    // otherwise recurse until the game crashes. Inside a render, a redraw is only noted, and done on
+    // the next frame.
+    void Redraw(bool keepScroll)
+    {
+        if (rendering) { pending = true; return; }
+        rendering = true;
+        try { Render(keepScroll); }
+        finally { rendering = false; }
     }
 
     void Closing()
@@ -138,8 +152,9 @@ public sealed class Window
     internal static void Tick()
     {
         var w = Current;
-        if (w == null || !w.IsOpen || w.AutoRefreshSeconds <= 0f) return;
-        if (Time.realtimeSinceStartup - w.lastRender >= w.AutoRefreshSeconds) w.Render(true);
+        if (w == null || !w.IsOpen) { pending = false; return; }
+        if (pending) { pending = false; w.Redraw(true); return; }
+        if (w.AutoRefreshSeconds > 0f && Time.realtimeSinceStartup - w.lastRender >= w.AutoRefreshSeconds) w.Redraw(true);
     }
 
     // ------------------------------------------------------------------ drawing
@@ -196,14 +211,14 @@ public sealed class Window
         {
             int idx = i;
             bool on = i == TabIndex;
-            float w = Math.Max(220f, 40f + tabs[i].Name.Length * 22f);
+            float w = Math.Clamp(40f + (tabs[i].Name?.Length ?? 0) * 22f, 220f, 520f);
             // The active tab is taller and joins the frame below it, as Steam's did.
             var rt = Kit.Rect(strip, "Tab" + i, 0, 0, 0, 1, 0, on ? -Bevel : 0, 0, on ? 0 : 8);
             rt.pivot = new Vector2(0, 0.5f);
             rt.sizeDelta = new Vector2(w, rt.sizeDelta.y);
             rt.anchoredPosition = new Vector2(x, rt.anchoredPosition.y);
             x += w + 6;
-            var b = Kit.Button(rt, tabs[i].Name, () => { TabIndex = idx; Render(false); }, TabText, bold: on);
+            var b = Kit.Button(rt, tabs[i].Name ?? "", () => { TabIndex = idx; Redraw(false); }, TabText, bold: on);
             if (!on && b.Text != null) b.Text.color = Kit.Muted;
         }
     }
@@ -217,15 +232,35 @@ public sealed class Window
         Kit.Frame(frame, Kit.Sunken);
         Kit.Fill(Kit.Rect(frame, "Well", 0, 0, 1, 1, Bevel, Bevel, Bevel, Bevel), Kit.Well);
 
+        // As many rows as fit; with more items, the last row becomes [^] [v] to page through them,
+        // and the selected item is kept in view.
+        int fit = Math.Max(2, (int)((Height - top - M - 2 * Bevel) / SideRow));
+        bool paged = items.Count > fit;
+        int rows = paged ? fit - 1 : items.Count;
+        if (paged)
+        {
+            if (SidebarIndex < sideOffset) sideOffset = SidebarIndex;
+            if (SidebarIndex >= sideOffset + rows) sideOffset = SidebarIndex - rows + 1;
+            sideOffset = Math.Clamp(sideOffset, 0, items.Count - rows);
+        }
+        else sideOffset = 0;
+
         float y = Bevel;
-        for (int i = 0; i < items.Count; i++)
+        for (int i = sideOffset; i < sideOffset + rows && i < items.Count; i++)
         {
             int idx = i;
             bool on = i == SidebarIndex;
             var row = Kit.Strip(frame, "Item" + i, y, SideRow, Bevel, Bevel);
-            Kit.Flat(row, on ? Kit.Select : (i % 2 == 0 ? Kit.Well : Kit.RowAlt), () => { SidebarIndex = idx; Render(false); });
-            Kit.Label(row, items[i], SideText, on ? Color.white : Kit.Text, TextAlignmentOptions.MidlineLeft, 20, 12);
+            Kit.Flat(row, on ? Kit.Select : (i % 2 == 0 ? Kit.Well : Kit.RowAlt), () => { SidebarIndex = idx; Redraw(false); });
+            Kit.Label(row, items[i] ?? "", SideText, on ? Color.white : Kit.Text, TextAlignmentOptions.MidlineLeft, 20, 12);
             y += SideRow;
         }
+        if (!paged) return;
+
+        var bar = Kit.Strip(frame, "Paging", y, SideRow, Bevel, Bevel);
+        int page = rows;
+        Kit.Button(Kit.Rect(bar, "Up", 0, 0, 0.3f, 1, 4, 6, 4, 6), null, () => { sideOffset = Math.Max(0, sideOffset - page); Redraw(false); }, 40, Kit.UpIcon);
+        Kit.Button(Kit.Rect(bar, "Down", 0.7f, 0, 1, 1, 4, 6, 4, 6), null, () => { sideOffset = Math.Min(items.Count - page, sideOffset + page); Redraw(false); }, 40, Kit.DownIcon);
+        Kit.Label(Kit.Rect(bar, "Pos", 0.3f, 0, 0.7f, 1), $"{sideOffset + 1}-{Math.Min(items.Count, sideOffset + rows)} of {items.Count}", 30, Kit.Muted, TextAlignmentOptions.Center);
     }
 }

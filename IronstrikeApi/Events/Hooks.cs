@@ -47,6 +47,9 @@ internal static class Hooks
             Level = Enum.IsDefined(typeof(LevelSceneNum), s.buildIndex) ? (LevelSceneNum)s.buildIndex : null,
         };
         Scene = change;
+        // Levels load on top of a base scene that persists, so a mod window would survive the change
+        // and float where the player used to be. Close it, as the game's own menus close.
+        try { Ui.Window.Current?.Close(); } catch (Exception) { }
         GameEvents.RaiseScene(change);
 
         // A run is the time spent in levels between two visits to the haven. Read off the scene, so it

@@ -74,6 +74,10 @@ The stats
 Multipliers or percentages?
 ===========================
 
+**Verified:** in the hook, the local player's ``MoveSpeed`` arrives as **0** when no skill or status
+effect changes it. It is a bonus, not a multiplier, so ``v * 2`` does nothing at all; use
+:cs:meth:`~IronstrikeApi.Gameplay.Stats.Scale`, or add to it.
+
 The shipped game is compiled with IL2CPP, which keeps the shape of every method but not its body.
 So whether ``MoveSpeed`` is a multiplier (1.0 = normal) or a bonus percentage (0 = normal) cannot be
 read from the binary. :cs:meth:`~IronstrikeApi.Gameplay.Stats.Scale` handles both: it multiplies,

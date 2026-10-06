@@ -26,27 +26,14 @@ public delegate float StatModifier(Fighter fighter, SkillCalcType stat, float va
 [HarmonyPatch]
 public static class Stats
 {
-    sealed class Entry : IDisposable
-    {
-        public SkillCalcType Stat;
-        public StatModifier Fn;
-        public Delegate Source;        // what the mod passed in, for blame
-        public int Order;
-        public long Seq;
-        public int Failures;
-        public bool LocalOnly;
-        public void Dispose() => Remove(this);
-    }
-
-    static readonly Dictionary<SkillCalcType, List<Entry>> mods = new();
-    static long seq;
+    internal static readonly StatEngine Engine = new();
 
     /// <summary>Adds a modifier for one stat, on every fighter. Dispose the result to remove it.</summary>
     /// <param name="stat">The stat to change.</param>
     /// <param name="modifier">The change.</param>
     /// <param name="order">Lower runs first. Default 0.</param>
     public static IDisposable Modify(SkillCalcType stat, StatModifier modifier, int order = 0)
-        => Add(stat, modifier, order, false, modifier);
+        => Engine.Add(stat, modifier, order, false, modifier);
 
     /// <summary>
     /// Adds a modifier that only applies to the local player's own fighter:
@@ -58,7 +45,7 @@ public static class Stats
     public static IDisposable ModifyLocal(SkillCalcType stat, Func<float, float> modifier, int order = 0)
     {
         if (modifier == null) throw new ArgumentNullException(nameof(modifier));
-        return Add(stat, (f, s, v) => modifier(v), order, true, modifier);
+        return Engine.Add(stat, (f, s, v) => modifier(v), order, true, modifier);
     }
 
     /// <summary>
@@ -70,56 +57,103 @@ public static class Stats
     /// <param name="factor">1 = unchanged, 2 = double.</param>
     public static float Scale(float value, float factor)
     {
+        if (float.IsNaN(factor) || float.IsInfinity(factor)) return value;
+        if (factor < 0f) factor = 0f;
         if (Math.Abs(factor - 1f) < 0.0001f) return value;
         return Math.Max(value * factor, factor - 1f);
     }
 
     /// <summary>How many modifiers are active, over all stats.</summary>
-    public static int Count
-    {
-        get { int n = 0; foreach (var l in mods.Values) n += l.Count; return n; }
-    }
-
-    static IDisposable Add(SkillCalcType stat, StatModifier fn, int order, bool localOnly, Delegate source)
-    {
-        if (fn == null) throw new ArgumentNullException(nameof(fn));
-        var e = new Entry { Stat = stat, Fn = fn, Order = order, Seq = ++seq, LocalOnly = localOnly, Source = source };
-        if (!mods.TryGetValue(stat, out var l)) mods[stat] = l = new List<Entry>();
-        l.Add(e);
-        l.Sort((a, b) => a.Order != b.Order ? a.Order.CompareTo(b.Order) : a.Seq.CompareTo(b.Seq));
-        return e;
-    }
-
-    static void Remove(Entry e)
-    {
-        if (mods.TryGetValue(e.Stat, out var l)) l.Remove(e);
-    }
+    public static int Count => Engine.Count;
 
     // Same signature as the trainer's, verified live there.
     [HarmonyPostfix]
     [HarmonyPatch(typeof(Fighter), nameof(Fighter.CalcSkillAndStatusEffectValue))]
     static void Postfix(Fighter __instance, SkillCalcType type, ref float __result)
     {
-        if (mods.Count == 0 || !mods.TryGetValue(type, out var l) || l.Count == 0) return;
+        if (!Engine.Has(type)) return;
         Events.Hooks.Live("Fighter.CalcSkillAndStatusEffectValue");
         if (!Safety.GameplayAllowed) return;
+        __result = Engine.Apply(type, __instance, f => Players.IsLocal(f), __result);
+    }
+}
 
-        IntPtr local = Players.LocalFighter?.Pointer ?? IntPtr.Zero;
-        // A copy: a modifier may dispose itself (or add another) while running.
-        foreach (var e in l.ToArray())
+// The modifier list, kept apart from the hook so it can be tested without the game.
+//
+// Per stat, an immutable array that is replaced on every change (copy-on-write): the stat function
+// runs hundreds of times a second, so reading must not allocate, and a modifier that adds or removes
+// modifiers while running must not disturb the pass in progress.
+internal sealed class StatEngine
+{
+    internal sealed class Entry : IDisposable
+    {
+        public SkillCalcType Stat;
+        public StatModifier Fn;
+        public Delegate Source;        // what the mod passed in, for blame
+        public int Order;
+        public long Seq;
+        public int Failures;
+        public bool LocalOnly;
+        public bool Removed;
+        public StatEngine Owner;
+        public void Dispose() => Owner.Remove(this);
+    }
+
+    public const int MaxFailures = 5;
+    public const int MaxDepth = 4;     // a modifier that reads its own stat would otherwise recurse forever
+
+    readonly Dictionary<SkillCalcType, Entry[]> mods = new();
+    long seq;
+    int depth;
+
+    public int Count { get { int n = 0; foreach (var a in mods.Values) n += a.Length; return n; } }
+
+    public bool Has(SkillCalcType t) => mods.TryGetValue(t, out var a) && a.Length > 0;
+
+    public IDisposable Add(SkillCalcType stat, StatModifier fn, int order, bool localOnly, Delegate source)
+    {
+        if (fn == null) throw new ArgumentNullException(nameof(fn));
+        var e = new Entry { Stat = stat, Fn = fn, Order = order, Seq = ++seq, LocalOnly = localOnly, Source = source ?? fn, Owner = this };
+        var l = new List<Entry>(mods.TryGetValue(stat, out var cur) ? cur : Array.Empty<Entry>()) { e };
+        l.Sort((a, b) => a.Order != b.Order ? a.Order.CompareTo(b.Order) : a.Seq.CompareTo(b.Seq));
+        mods[stat] = l.ToArray();
+        return e;
+    }
+
+    void Remove(Entry e)
+    {
+        if (e.Removed) return;
+        e.Removed = true;
+        if (!mods.TryGetValue(e.Stat, out var cur)) return;
+        mods[e.Stat] = Array.FindAll(cur, x => !ReferenceEquals(x, e));
+    }
+
+    public float Apply(SkillCalcType type, Fighter f, Func<Fighter, bool> isLocal, float value)
+    {
+        if (!mods.TryGetValue(type, out var arr) || arr.Length == 0) return value;
+        if (depth >= MaxDepth) return value;
+        depth++;
+        bool? local = null;
+        try
         {
-            if (e.Failures >= 5) continue;
-            if (e.LocalOnly && (__instance == null || __instance.Pointer != local)) continue;
-            try
+            foreach (var e in arr)
             {
-                float v = e.Fn(__instance, type, __result);
-                if (!float.IsNaN(v) && !float.IsInfinity(v)) __result = v;
-            }
-            catch (Exception ex)
-            {
-                e.Failures++;
-                Safe.Blame(e.Source, $"stat modifier ({type})", ex);
+                if (e.Removed || e.Failures >= MaxFailures) continue;
+                // "is not null", not "!= null": Unity's overloaded operator calls into the engine.
+                if (e.LocalOnly && !(local ??= f is not null && isLocal(f))) continue;
+                try
+                {
+                    float v = e.Fn(f, type, value);
+                    if (!float.IsNaN(v) && !float.IsInfinity(v)) value = v;
+                }
+                catch (Exception ex)
+                {
+                    e.Failures++;
+                    Safe.Blame(e.Source, $"stat modifier ({type})", ex);
+                }
             }
         }
+        finally { depth--; }
+        return value;
     }
 }

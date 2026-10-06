@@ -70,14 +70,22 @@ internal static class SessionHooks
         if (s == null || s.Raised) return;
         s.Raised = true;
 
-        var ctx = s.Mode == GameMode.Single ? PlayContext.Solo
-                : s.ModdedLobby || ServersSaysModded() ? PlayContext.ModdedServer
-                : Safety.privateEntry ? PlayContext.PrivateMatch
-                : PlayContext.Public;
+        var ctx = Classify(s.Mode, s.ModdedLobby, ServersSaysModded(), Safety.privateEntry);
         Safety.Context = ctx;
         s.Change = new SessionChange { Context = ctx, Mode = s.Mode };
         Plugin.Log.LogInfo($"session: {ctx} ({s.Mode}); gameplay changes {(Safety.GameplayAllowed ? "allowed" : "OFF")}");
         GameEvents.RaiseSessionStarted(s.Change);
+    }
+
+    // Anything not positively known to be solo, private or modded is treated as public: a session
+    // must earn the right to gameplay changes, never get it by default.
+    internal static PlayContext Classify(GameMode mode, bool moddedLobby, bool serversSaysModded, bool privateEntry)
+    {
+        if (mode == GameMode.Single) return PlayContext.Solo;
+        if (moddedLobby || serversSaysModded) return PlayContext.ModdedServer;
+        if (privateEntry && (mode == GameMode.Host || mode == GameMode.Client || mode == GameMode.AutoHostOrClient))
+            return PlayContext.PrivateMatch;
+        return PlayContext.Public;
     }
 
     [HarmonyPostfix]

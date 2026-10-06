@@ -33,14 +33,25 @@ public static class ApiLog
     public static void WarnOnce(ManualLogSource log, string key, string message)
     {
         lock (once) if (!once.Add(key)) return;
-        (log ?? Plugin.Log).LogWarning(message);
+        if (log != null) log.LogWarning(message); else Diag.Warn(message);
     }
 
     internal static void Once(string key, string message)
     {
         lock (once) if (!once.Add(key)) return;
-        Plugin.Log.LogInfo(message);
+        Diag.Info(message);
     }
+}
+
+// The API's own log lines. Before the plugin has loaded (and in the unit tests) there is no
+// BepInEx log yet; nothing that reports a problem may itself throw for that reason.
+internal static class Diag
+{
+    internal static Action<string> Sink;          // tests capture output here
+
+    internal static void Info(string s) { if (Sink != null) Sink("I " + s); else if (Plugin.Log != null) Plugin.Log.LogInfo(s); }
+    internal static void Warn(string s) { if (Sink != null) Sink("W " + s); else if (Plugin.Log != null) Plugin.Log.LogWarning(s); }
+    internal static void Error(string s) { if (Sink != null) Sink("E " + s); else if (Plugin.Log != null) Plugin.Log.LogError(s); else Console.Error.WriteLine(s); }
 }
 
 // Event dispatch that one broken mod cannot take down: every subscriber runs in its own try/catch,
@@ -49,7 +60,11 @@ public static class ApiLog
 internal static class Safe
 {
     const int MuteAfter = 5;
+    // Across all handlers: many broken handlers at once (a mod subscribing in a loop) must not flood
+    // the log either. Past this, failures are only counted, with a summary now and then.
+    internal const int MaxReports = 100;
     static readonly Dictionary<Delegate, int> failures = new();
+    static int reports, suppressed;
 
     internal static void Run(Delegate d, string what, params object[] args)
     {
@@ -83,13 +98,38 @@ internal static class Safe
         }
     }
 
+    static bool IsPowerOfTen(int n) { while (n >= 10 && n % 10 == 0) n /= 10; return n == 1; }
+
+    internal static void ResetReports() { reports = 0; suppressed = 0; }
+
+    internal static int Failures(Delegate h) => h != null && failures.TryGetValue(h, out int n) ? n : 0;
+
     internal static void Blame(Delegate h, string what, Exception e)
     {
-        failures.TryGetValue(h, out int n);
-        failures[h] = ++n;
-        var owner = Mods.Owner(h.Method.DeclaringType);
-        string who = owner != null ? owner.Name : h.Method.DeclaringType?.Assembly.GetName().Name ?? "?";
-        Plugin.Log.LogError($"{who}: {what} handler {h.Method.DeclaringType?.Name}.{h.Method.Name} threw: {e}" +
-                            (n >= MuteAfter ? $"\n(muted after {MuteAfter} failures)" : ""));
+        int n = 1;
+        string who = "?", where = "?";
+        try
+        {
+            if (h != null)
+            {
+                failures.TryGetValue(h, out n);
+                failures[h] = ++n;
+                where = $"{h.Method.DeclaringType?.Name}.{h.Method.Name}";
+                who = h.Method.DeclaringType?.Assembly.GetName().Name ?? "?";
+                who = Mods.Owner(h.Method.DeclaringType)?.Name ?? who;
+            }
+        }
+        catch (Exception) { }     // the mod registry may not exist yet; the assembly name will do
+        // Only the first failures are written out in full; a handler failing every frame must not
+        // flood the log before it is muted.
+        if (n > MuteAfter) return;
+        if (reports >= MaxReports)
+        {
+            if (IsPowerOfTen(++suppressed))
+                Diag.Error($"handler errors: {MaxReports} reported in full, {suppressed} more since (only counted)");
+            return;
+        }
+        reports++;
+        Diag.Error($"{who}: {what} handler {where} threw: {e}" + (n == MuteAfter ? $"\n(muted after {MuteAfter} failures)" : ""));
     }
 }

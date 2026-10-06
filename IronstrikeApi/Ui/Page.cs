@@ -31,6 +31,9 @@ public sealed class Page
     /// <summary>Height of a settings row, in canvas units.</summary>
     public const float RowHeight = 84f;
 
+    /// <summary>The most rows <see cref="Table"/> draws; the rest are counted, not shown.</summary>
+    public const int MaxTableRows = 300;
+
     const float T = 38f, Small = 32f, Pad = 24f, LabelShare = 0.42f;
 
     readonly Window window;
@@ -98,6 +101,7 @@ public sealed class Page
     /// <param name="label">Optional name on the left.</param>
     public void Button(string text, Action onClick, string label = null)
     {
+        text ??= "";
         RectTransform c;
         if (label != null) (_, c) = Split(RowHeight, label, null);
         else c = Row(RowHeight);
@@ -116,7 +120,7 @@ public sealed class Page
         for (int i = 0; i < buttons.Length; i++)
         {
             var b = Kit.Rect(r, "Button" + i, i * w, 0, (i + 1) * w, 1, i == 0 ? 0 : 8, 6, i == buttons.Length - 1 ? 0 : 8, 6);
-            Kit.Button(b, buttons[i].Text, Wrap(buttons[i].OnClick), T);
+            Kit.Button(b, buttons[i].Text ?? "", Wrap(buttons[i].OnClick), T);
         }
     }
 
@@ -144,12 +148,17 @@ public sealed class Page
     public void Stepper(string label, float value, float step, float min, float max, Action<float> onChange,
                         string format = "0.##", string help = null)
     {
-        float Clamp(float v) => (float)Math.Round(Math.Clamp(v, min, max), 4);
+        if (min > max) (min, max) = (max, min);                // a range written backwards
+        if (float.IsNaN(value)) value = min;
+        float Clamp(float v) => float.IsNaN(v) ? min : (float)Math.Round(Math.Clamp(v, min, max), 4);
         var (_, c) = Split(help != null ? 120f : RowHeight, label, help);
         var s = Kit.Rect(c, "Stepper", 0, 0, 0, 1, 0, 6, 0, 6);
         s.pivot = new Vector2(0, 0.5f);
         s.sizeDelta = new Vector2(Math.Min(560f, c.rect.width > 1 ? c.rect.width : 560f), s.sizeDelta.y);
-        Kit.Spinner(s, value.ToString(format, CultureInfo.InvariantCulture),
+        string shown;
+        try { shown = value.ToString(format ?? "0.##", CultureInfo.InvariantCulture); }
+        catch (FormatException) { shown = value.ToString(CultureInfo.InvariantCulture); }
+        Kit.Spinner(s, shown,
                     Wrap(() => onChange?.Invoke(Clamp(value - step)), onChange),
                     Wrap(() => onChange?.Invoke(Clamp(value + step)), onChange), T);
     }
@@ -167,7 +176,7 @@ public sealed class Page
         var s = Kit.Rect(c, "Choice", 0, 0, 0, 1, 0, 6, 0, 6);
         s.pivot = new Vector2(0, 0.5f);
         s.sizeDelta = new Vector2(760f, s.sizeDelta.y);
-        string shown = n == 0 ? "-" : options[((index % n) + n) % n];
+        string shown = n == 0 ? "-" : options[((index % n) + n) % n] ?? "";
         Kit.Spinner(s, shown,
                     Wrap(() => { if (n > 0) onChange?.Invoke(((index - 1) % n + n) % n); }, onChange),
                     Wrap(() => { if (n > 0) onChange?.Invoke((index + 1) % n); }, onChange), T);
@@ -186,6 +195,7 @@ public sealed class Page
         var f = Kit.Rect(c, "Field", 0, 0, 1, 1, 0, 6, 0, 6);
         string shown = string.IsNullOrEmpty(value) ? $"<color={Kit.Tag(Kit.Muted)}>(empty)</color>"
                      : secret ? new string('*', Math.Min(value.Length, 12)) : value;
+        maxLength = Math.Max(1, maxLength);
         Kit.Field(f, shown, Wrap(() => TextInput.Ask(label, maxLength, s => onChange?.Invoke(s)), onChange), T);
     }
 
@@ -200,7 +210,7 @@ public sealed class Page
     public void Table(IReadOnlyList<TableColumn> columns, IReadOnlyList<string[]> rows, int selected = -1, Action<int> onClick = null)
     {
         if (columns == null || columns.Count == 0) return;
-        float total = 0; foreach (var c in columns) total += c.Weight;
+        float total = 0; foreach (var c in columns) total += c?.Weight ?? 1f;
         const float H = 62f;
 
         var head = Row(H);
@@ -208,13 +218,16 @@ public sealed class Page
         float x = 0;
         foreach (var c in columns)
         {
-            float w = c.Weight / total;
-            Kit.Label(Kit.Rect(head, "H", x, 0, x + w, 1), c.Name, Small, Kit.Text, TextAlignmentOptions.MidlineLeft, 14, 6);
+            float w = (c?.Weight ?? 1f) / total;
+            Kit.Label(Kit.Rect(head, "H", x, 0, x + w, 1), c?.Name ?? "", Small, Kit.Text, TextAlignmentOptions.MidlineLeft, 14, 6);
             x += w;
         }
 
         rows ??= Array.Empty<string[]>();
-        for (int i = 0; i < rows.Count; i++)
+        // Every row is a few dozen Unity objects, rebuilt on every redraw; past this a page would
+        // stall the game. Mods with more data should page or filter it.
+        int shownRows = Math.Min(rows.Count, MaxTableRows);
+        for (int i = 0; i < shownRows; i++)
         {
             int idx = i;
             var r = Row(H);
@@ -225,13 +238,14 @@ public sealed class Page
             x = 0;
             for (int ci = 0; ci < columns.Count; ci++)
             {
-                float w = columns[ci].Weight / total;
+                float w = (columns[ci]?.Weight ?? 1f) / total;
                 string cell = rows[i] != null && ci < rows[i].Length ? rows[i][ci] : "";
                 Kit.Label(Kit.Rect(r, "C", x, 0, x + w, 1), cell, Small, on ? Color.white : Kit.Text, TextAlignmentOptions.MidlineLeft, 14, 6, shrink: false);
                 x += w;
             }
         }
         if (rows.Count == 0) Text("(nothing here)", muted: true);
+        else if (rows.Count > shownRows) Text($"... and {rows.Count - shownRows} more row(s), not shown", muted: true);
         y += 10f;
     }
 

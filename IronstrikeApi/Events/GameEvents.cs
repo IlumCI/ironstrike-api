@@ -110,7 +110,7 @@ public static class GameEvents
 
     static void Trace(string what)
     {
-        if (Plugin.C.LogEvents.Value) Plugin.Log.LogInfo("event: " + what);
+        if (Plugin.C?.LogEvents.Value == true) Diag.Info("event: " + what);
     }
 
     internal static void RaiseUpdate() => Safe.Run(Update, "Update");

@@ -279,6 +279,27 @@ internal static class Panel
 
     // ------------------------------------------------------------ placement
 
+    // The camera whose picture the player sees: in VR the headset's stereo camera; flat, the enabled
+    // camera that draws to the screen last (highest depth, no render texture). Camera.main is only a
+    // tag and was not the visible camera when playing flat.
+    static Camera ScreenCamera()
+    {
+        Camera best = null;
+        var all = Camera.allCameras;
+        var seen = new System.Text.StringBuilder();
+        foreach (var c in all)
+        {
+            if (c == null || !c.enabled || !c.gameObject.activeInHierarchy) continue;
+            seen.Append($" '{c.name}'(depth {c.depth}, stereo {c.stereoEnabled}, rt {(c.targetTexture != null)}, ui {((c.cullingMask & (1 << Kit.Layer)) != 0)})");
+            if (c.targetTexture != null) continue;
+            if ((c.cullingMask & (1 << Kit.Layer)) == 0) continue;     // cannot see UI anyway
+            if (c.stereoEnabled) return c;
+            if (best == null || c.depth > best.depth) best = c;
+        }
+        ApiLog.Once("cams:" + seen, "cameras:" + seen);
+        return best ?? Camera.main;
+    }
+
     static void Place(Transform beside)
     {
         float width = Width * panel.transform.lossyScale.x;
@@ -291,13 +312,20 @@ internal static class Panel
             return;
         }
 
-        var cam = GM.instance?.MainCamera;
-        if (cam == null) return;
-        var fwd = cam.transform.forward; fwd.y = 0f;
+        // The camera that is actually rendering (Camera.main, the MainCamera tag) first; GM's own
+        // reference second. Flat under Proton they were not the same, and a window placed in front of
+        // GM's camera never appeared (found by the in-game stress test).
+        Transform cam = null;
+        try { var c = ScreenCamera(); if (c != null) cam = c.transform; } catch (Exception) { }
+        if (cam == null) { var m = GM.instance?.MainCamera; if (m != null) cam = m.transform; }
+        if (cam == null) { Plugin.Log.LogWarning("window: no camera to place it in front of"); return; }
+        var fwd = cam.forward; fwd.y = 0f;
         if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
         fwd.Normalize();
         float dist = Mathf.Max(1.2f, width * 0.75f);
-        panel.transform.SetPositionAndRotation(cam.transform.position + fwd * dist,
-                                               Quaternion.LookRotation(fwd));
+        panel.transform.SetPositionAndRotation(cam.position + fwd * dist, Quaternion.LookRotation(fwd));
+        if (Plugin.C?.StressTest.Value == true || Plugin.C?.LogEvents.Value == true)
+            Plugin.Log.LogInfo($"window placed {dist:0.0} m in front of camera '{cam.name}' at {cam.position}, facing {fwd}");
+        else ApiLog.Once("place:" + cam.name, $"window placed {dist:0.0} m in front of camera '{cam.name}'");
     }
 }
