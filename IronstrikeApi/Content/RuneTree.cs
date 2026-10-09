@@ -136,17 +136,21 @@ internal static class RuneTree
         // labels on the opener, one per game spell in that corner. Copy the borrowed school's tiles
         // into the same slots for the custom spells; they show while the player holds the custom
         // school, as the originals do for theirs (and the originals stay hidden: never held here).
+        // The tiles are SpellLabel children of the opener. Its SpellLabels list stays empty until the
+        // grid first wakes (GestureSpell.Init fills it from GetComponentsInChildren only when empty,
+        // and Init runs from GestureMagicSystem.Awake), so the children are searched, not the list:
+        // before the grid wakes, Init will collect our copies with the rest; after, they are added.
         var previews = new List<SpellLabel>();
-        foreach (var l in opener.SpellLabels.ToArray())
+        foreach (var l in opener.GetComponentsInChildren<SpellLabel>(true))
         {
-            if (l == null || (l.spell != s1 && l.spell != s2)) continue;
+            if (l == null || (l.spell != s1 && l.spell != s2) || l.gameObject.name.Contains("[api:")) continue;
             var copy = UnityEngine.Object.Instantiate(l.gameObject, l.transform.parent, false).GetComponent<SpellLabel>();
-            copy.gameObject.name = l.gameObject.name + " (" + d.Key + ")";
+            copy.gameObject.name = l.gameObject.name + " [api:" + d.Key + "]";
             copy.transform.localPosition = l.transform.localPosition;
             copy.transform.localRotation = l.transform.localRotation;
             copy.transform.localScale = l.transform.localScale;
             Retarget(copy, hostSchool, s1, s2, d, c1, c2);
-            opener.SpellLabels.Add(copy);
+            if (opener.SpellLabels != null && opener.SpellLabels.Count > 0) opener.SpellLabels.Add(copy);
             previews.Add(copy);
         }
         foreach (var n in nodes)
