@@ -10,4 +10,5 @@ mods built on it.
 .. toctree::
    :maxdepth: 2
 
+   0.2.rst
    0.1.rst

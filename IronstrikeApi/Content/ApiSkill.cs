@@ -23,7 +23,7 @@ namespace IronstrikeApi.Content;
 // with Cecil, and its resolver finds the game's native GameAssembly.dll (in the working directory)
 // before the interop one. A top-level class deriving from a game type makes BepInEx throw
 // BadImageFormatException and silently skip the whole plugin. Nested types are never examined.
-internal static class Injected
+internal static partial class Injected
 {
     internal class ApiSkill : Skill
     {

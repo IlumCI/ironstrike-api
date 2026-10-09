@@ -59,6 +59,24 @@ are patched per instantiation. **Burst-compiled code** cannot be patched.
           internal class MySkill : Skill { /* ... */ }
       }
 
+**Instances of an injected class are not scanned by the garbage collector.**
+   Il2CppInterop builds the class from a zeroed ``Il2CppClass`` and never sets ``has_references``,
+   so IL2CPP allocates its objects as pointer-free memory. Whatever their fields point to (lists,
+   other objects) is freed at the next full collection, which a level load runs. The symptom is far
+   from the cause: the game later aborts copying the object, with an impossible allocation such as
+   ``Could not allocate memory: 18446744067552063744B`` in ``Object.Instantiate``. Set the bit
+   (bitfield 0, bit 5 of the class struct for metadata 24 to 29) after registering, and check it with
+   ``il2cpp_class_has_references``. The API does this for its own classes (``GcScan``).
+
+**Calling a virtual game method from your override recurses.** ``base.Init()`` in an injected class
+   goes through the IL2CPP vtable, which leads back to your override. To run the game's own version,
+   invoke its ``MethodInfo`` directly with ``il2cpp_runtime_invoke`` (the interop class keeps it in a
+   private static field ``NativeMethodInfoPtr_<Name>_...``); that call is not virtual.
+
+**A fighter's transform is not its body.** ``Fighter.transform.position`` stays put while a bot walks
+   about. Use the rig (``LogicBody.FeetNode``, ``BodyCenterNode``), or the API's
+   :cs:type:`~IronstrikeApi.Gameplay.Body`.
+
 Objects and delegates
 =====================
 

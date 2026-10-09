@@ -55,6 +55,10 @@ internal static class Driver
         StressTest.Tick(now);
         Step(IconDump.Tick, "icon dump");
         Step(() => Content.ContentTest.Tick(now), "content test");
+        Step(() => Content.SpellProbe.Tick(now), "spell probe");
+        Step(Content.RuneTree.Tick, "rune grid");
+        Step(Content.SpellEffects.Fade.Tick, "spell effects");
+        Step(Content.SpellEffects.Later.Tick, "delayed spell actions");
     }
 
     static readonly System.Collections.Generic.HashSet<string> failedSteps = new();

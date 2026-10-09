@@ -1,0 +1,49 @@
+***************************
+  What's New In the API 0.2
+***************************
+
+:Release: |release|
+:Date: October 2026
+
+This release lets mods add content to the game itself: new skills on the upgrade screen, new magic
+schools for casters, and the spells they teach.
+
+Summary -- release highlights
+=============================
+
+* **New skills.** :cs:meth:`ModContent.Skill <IronstrikeApi.ModContent.Skill>` adds a skill the
+  game offers between fights, levels from I to V, syncs and shows with its own name, text and icon.
+  About forty hooks: stat bonuses that stack with the game's skills, and events for hits, kills,
+  dashes, blocks and casts. See :ref:`howto-content`.
+* **New magic schools and spells.** :cs:meth:`ModContent.School <IronstrikeApi.ModContent.School>`
+  and :cs:meth:`ModContent.Spell <IronstrikeApi.ModContent.Spell>`. Spells are drawn on the wand's
+  rune grid, aimed with the game's indicators and cast like the game's own; a
+  :cs:type:`~IronstrikeApi.Content.SpellCast` gives them damage, healing, status effects, area
+  queries, delayed actions, the game's projectiles and area effects, and simple effects of their own
+  (:cs:type:`~IronstrikeApi.Content.SpellFx`).
+* **Icons.** :cs:type:`~IronstrikeApi.Content.Icons` loads a PNG, an embedded resource or one of the
+  game's icons, and ships a library of 46 icons drawn in the game's style.
+* **Arcana**, a new example mod: five schools and ten spells (Chain Lightning, Orbital Laser, Raise
+  Dead, Life Drain, Telekinesis, Kinetic Ward, Flak Shot, Air Strike, Plague Cloud, Pestilence).
+* :cs:type:`~IronstrikeApi.Gameplay.Body`: where a fighter really is (feet, centre, head).
+
+Compatibility
+=============
+
+* Tested against the game's October 7, 2026 update (build 25763736). Every hook of 0.1 still fires.
+* Mods built for 0.1 run unchanged.
+* The mod greeting now carries a fingerprint of the registered content. A 0.1 API on the other side
+  greets with none, which counts as a mismatch only when this side has custom content.
+
+Known limitations
+=================
+
+* Custom content is off in Private Matches and on servers where players' content differs.
+* A custom school borrows the rune shapes of one game school and replaces it for that player; two
+  mods cannot borrow the same school.
+* Casting from the rune grid was verified piece by piece without a headset (templates, unlocking,
+  the cast through the wand, every spell's synced event against a bot). Please report how drawing
+  the runes feels in VR.
+* :cs:prop:`~IronstrikeApi.Content.CustomSpell.OnAreaHit` runs on one machine; status effects given
+  from it apply there only.
+* Spells' cooldowns only run during fights, as the game's do.

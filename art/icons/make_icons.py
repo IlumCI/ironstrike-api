@@ -620,6 +620,228 @@ def _(k):
     k.circle(C, C, 34)
 
 
+# ---- the example spell pack's schools and spells
+
+def cloud(k, cx, cy, w, fill=255):
+    """A storm cloud: overlapping puffs on a flat bottom."""
+    for dx, dy, r in ((-0.30, 0.05, 0.22), (-0.05, -0.12, 0.30), (0.25, -0.02, 0.24), (0.42, 0.10, 0.15), (-0.45, 0.14, 0.13)):
+        k.circle(cx + dx * w, cy + dy * w, r * w, fill)
+    k.rect(cx - 0.52 * w, cy + 0.02 * w, cx + 0.52 * w, cy + 0.24 * w, fill)
+
+
+def bolt_pts(x0, y0, x1, y1, w):
+    """A lightning bolt from (x0,y0) down to (x1,y1)."""
+    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+    return [(x0 - w * 0.6, y0), (x0 + w * 0.9, y0), (mx + w * 0.5, my - w * 0.2), (mx + w * 1.6, my - w * 0.2),
+            (x1, y1), (mx - w * 0.3, my + w * 0.5), (mx - w * 1.4, my + w * 0.5)]
+
+
+def bomb_pts(cx, top, w, h):
+    """An aerial bomb nose-down: rounded body, pointed nose, fins at the top."""
+    pts = []
+    for a in range(0, 181, 6):
+        t = math.radians(a)
+        pts.append((cx + w / 2 * math.cos(t), top + h * 0.62 + h * 0.38 * math.sin(t) ** 0.8))
+    pts = [(cx + w / 2, top + h * 0.25)] + pts + [(cx - w / 2, top + h * 0.25)]
+    return [(cx, top)] + pts
+
+
+def skull(k, cx, cy, r, fill=255):
+    k.circle(cx, cy, r, fill)
+    k.rect(cx - r * 0.58, cy + r * 0.45, cx + r * 0.58, cy + r * 1.05, fill)
+    k.circle(cx - r * 0.38, cy + r * 0.05, r * 0.28, 0)
+    k.circle(cx + r * 0.38, cy + r * 0.05, r * 0.28, 0)
+    k.poly([(cx, cy + r * 0.38), (cx - r * 0.14, cy + r * 0.62), (cx + r * 0.14, cy + r * 0.62)], 0)
+    for i in (-1, 0, 1):
+        k.rect(cx + i * r * 0.28 - r * 0.07, cy + r * 0.82, cx + i * r * 0.28 + r * 0.07, cy + r * 1.05, 0)
+
+
+@icon("school_tempest")
+def _(k):
+    cloud(k, C, 360, 760)
+    b = k.layer()
+    b.poly(bolt_pts(C + 10, 330, C - 60, 960, 70))
+    gap = k.layer()
+    gap.poly(bolt_pts(C + 10, 300, C - 60, 990, 104))
+    k.cut(gap)                                       # a dark outline around the bolt
+    k.add(b)
+    sparkle(k, 820, 690, 80)
+    sparkle(k, 210, 720, 55)
+
+
+@icon("school_necromancy")
+def _(k):
+    k.ring(C, C, 430, 40)
+    for a in range(0, 360, 60):
+        x, y = C + 430 * math.cos(math.radians(a - 90)), C + 430 * math.sin(math.radians(a - 90))
+        k.poly([(x, y - 62), (x + 40, y), (x, y + 62), (x - 40, y)])
+        k.poly([(x, y - 30), (x + 18, y), (x, y + 30), (x - 18, y)], 0)
+    skull(k, C, 450, 205)
+    k.poly(flame_pts(C, 260, 230, 300, tongues=3, seed=7))      # a soul flame rising
+
+
+@icon("school_mind")
+def _(k):
+    eye = k.layer()
+    eye.d.ellipse([C - 380, C - 170, C + 380, C + 210], fill=255)
+    k.add(eye)
+    k.circle(C, C + 20, 150, 0)
+    k.circle(C, C + 20, 92)
+    k.circle(C + 34, C - 14, 30, 0)
+    for i, r in enumerate((270, 360, 450)):
+        k.arc(C, C + 40, r, 230, 310, 40 - i * 6)               # thought waves above
+    sparkle(k, C, 120, 70)
+
+
+@icon("school_war")
+def _(k):
+    # an aerial bomb falling nose-first, fins up, onto a burst
+    k.d.ellipse([C - 150, 250, C + 150, 760], fill=255)
+    k.poly([(C - 120, 640), (C + 120, 640), (C, 860)])
+    k.rect(C - 40, 150, C + 40, 300)
+    for sgn in (-1, 1):
+        k.poly([(C + sgn * 30, 140), (C + sgn * 190, 90), (C + sgn * 190, 250), (C + sgn * 60, 320)])
+    k.rect(C - 160, 430, C + 160, 470, 0)
+    speed_lines(k, 170, 300, (260, 360, 460), 34)
+    speed_lines(k, 724, 854, (260, 360, 460), 34)
+    k.poly(star_pts(C, 900, 170, 60, 8))
+
+@icon("school_plague")
+def _(k):
+    k.circle(C, C, 120)
+    for a in (-90, 30, 150):
+        x, y = C + 230 * math.cos(math.radians(a)), C + 230 * math.sin(math.radians(a))
+        k.circle(x, y, 210)
+        k.circle(x + 70 * math.cos(math.radians(a)), y + 70 * math.sin(math.radians(a)), 150, 0)
+    k.circle(C, C, 70, 0)
+    k.ring(C, C, 330, 40)
+    hole = k.layer()
+    for a in (-90, 30, 150):
+        hole.line([(C, C), (C + 140 * math.cos(math.radians(a)), C + 140 * math.sin(math.radians(a)))], 34)
+    k.cut(hole)
+
+
+@icon("spell_chain_lightning")
+def _(k):
+    nodes = [(170, 330), (512, 700), (860, 300)]
+    for (x0, y0), (x1, y1) in zip(nodes, nodes[1:]):
+        dx, dy = x1 - x0, y1 - y0
+        L = math.hypot(dx, dy)
+        ux, uy = dx / L, dy / L
+        nx, ny = -uy, ux
+        pts = []
+        for t, o in ((0.0, 0), (0.38, 70), (0.46, -40), (0.62, 60), (0.70, -30), (1.0, 0)):
+            pts.append((x0 + dx * t + nx * o, y0 + dy * t + ny * o))
+        k.line(pts, 58)
+    for x, y in nodes:
+        k.circle(x, y, 120)
+        k.circle(x, y, 58, 0)
+        k.circle(x, y, 26)
+    sparkle(k, 512, 220, 110)
+
+@icon("spell_orbital_laser")
+def _(k):
+    k.d.ellipse([C - 260, 90, C + 260, 230], outline=255, width=40)     # the orbit
+    k.circle(C, 160, 70)
+    k.poly([(C - 60, 210), (C + 60, 210), (C + 120, 800), (C - 120, 800)])   # the beam
+    k.poly([(C - 22, 230), (C + 22, 230), (C + 44, 780), (C - 44, 780)], 0)
+    k.poly(star_pts(C, 830, 220, 70, 8))
+    k.rect(140, 900, 884, 940)
+
+
+@icon("spell_raise_dead")
+def _(k):
+    k.d.rounded_rectangle([C - 230, 430, C + 230, 920], radius=200, fill=255)
+    k.rect(C - 26, 520, C + 26, 800, 0)
+    k.rect(C - 110, 590, C + 110, 640, 0)
+    k.rect(150, 900, 874, 950)
+    arrow(k, C, 400, C, 80, 70, head=3.0, fletch=False)
+    sparkle(k, 240, 260, 70)
+    sparkle(k, 790, 230, 55)
+
+
+@icon("spell_life_drain")
+def _(k):
+    k.poly(droplet_pts(240, 640, 175, tip=1.8))
+    k.poly(heart_pts(760, 600, 430, 390))
+    k.poly(heart_pts(760, 610, 210, 190), 0)
+    pts = [(500 + 300 * math.cos(math.radians(a)), 470 - 260 * math.sin(math.radians(a))) for a in range(185, 0, -5)]
+    k.line(pts, 62)
+    ex, ey = pts[-1]
+    k.poly([(ex + 95, ey - 30), (ex - 70, ey - 40), (ex + 10, ey + 120)])
+
+@icon("spell_kinetic_ward")
+def _(k):
+    k.poly(shield_pts(C + 120, 200, 520, 640))
+    k.poly(shield_pts(C + 120, 300, 300, 400), 0)
+    for i, r in enumerate((260, 360, 460)):
+        k.arc(C + 120, 520, r, 150, 210, 44 - i * 6)
+
+
+@icon("spell_telekinesis")
+def _(k):
+    rock = [(C - 230, 300), (C - 90, 170), (C + 140, 190), (C + 260, 320), (C + 200, 470), (C - 40, 520), (C - 230, 440)]
+    k.poly(rock)
+    k.line([(C - 90, 260), (C + 20, 330), (C + 150, 300)], 28, 0)
+    for i, y in enumerate((640, 750, 860)):
+        w = 300 - i * 70
+        pts = [(C - w + t * 2 * w / 30, y + 26 * math.sin(t / 30 * math.pi * 4)) for t in range(31)]
+        k.line(pts, 40)
+    sparkle(k, 190, 600, 60)
+    sparkle(k, 840, 560, 60)
+
+
+@icon("spell_flak_shot")
+def _(k):
+    for deg in (-26, 0, 26):
+        shell = [(C - 52, 760), (C + 52, 760), (C + 52, 470), (C, 330), (C - 52, 470)]
+        k.poly(rot(shell, C, 900, deg))
+        band = [(C - 54, 690), (C + 54, 690), (C + 54, 720), (C - 54, 720)]
+        k.poly(rot(band, C, 900, deg), 0)
+    k.poly(star_pts(C, 170, 150, 60, 8))
+    k.circle(C, 170, 40, 0)
+
+
+@icon("spell_air_strike")
+def _(k):
+    k.ring(C, 700, 230, 40)
+    k.line([(C, 420), (C, 520)], 36)
+    k.line([(C, 880), (C, 980)], 30)
+    k.line([(C - 330, 700), (C - 250, 700)], 36)
+    k.line([(C + 250, 700), (C + 330, 700)], 36)
+    k.circle(C, 700, 50)
+    for x, top in ((C - 250, 90), (C, 40), (C + 250, 90)):
+        k.poly(bomb_pts(x, top + 300, 110, -260))
+        k.line([(x, top - 20), (x, top + 20)], 24)
+
+
+@icon("spell_plague_cloud")
+def _(k):
+    cloud(k, C, 330, 800)
+    for x, y in ((C - 230, 720), (C, 820), (C + 230, 720)):
+        k.poly(droplet_pts(x, y, 80, tip=1.9))
+    k.circle(C - 120, 360, 60, 0)
+    k.circle(C + 110, 320, 60, 0)
+    k.circle(C - 10, 430, 60, 0)
+
+@icon("spell_pestilence")
+def _(k):
+    for sgn in (-1, 1):
+        w = k.layer()
+        w.d.ellipse([C + sgn * 40 - 210 + sgn * 170, 170, C + sgn * 40 + 210 + sgn * 170, 520], fill=255)
+        w.d.ellipse([C + sgn * 40 - 140 + sgn * 170, 240, C + sgn * 40 + 140 + sgn * 170, 450], fill=0)
+        k.add(w)
+    k.d.ellipse([C - 110, 360, C + 110, 860], fill=255)        # body
+    k.circle(C, 300, 105)                                        # head
+    k.circle(C - 46, 285, 30, 0)
+    k.circle(C + 46, 285, 30, 0)
+    for i in range(3):
+        k.rect(C - 110, 520 + i * 100, C + 110, 545 + i * 100, 0)
+    for sgn in (-1, 1):
+        for y, dx in ((470, 230), (580, 260), (690, 230)):
+            k.line([(C + sgn * 100, y), (C + sgn * dx, y + 60), (C + sgn * (dx + 40), y + 150)], 26)
+
+
 def main():
     os.makedirs(DEST, exist_ok=True)
     made = []

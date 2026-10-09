@@ -22,8 +22,10 @@ jobs:
         run: dotnet build IronstrikeApi/IronstrikeApi.csproj -c Release --nologo
 
       # The example is the contract: if it stops compiling, a public API changed under mods.
-      - name: Build the example mod
-        run: dotnet build examples/HelloMod/HelloMod.csproj -c Release --nologo
+      - name: Build the example mods
+        run: |
+          dotnet build examples/HelloMod/HelloMod.csproj -c Release --nologo
+          dotnet build examples/Arcana/Arcana.csproj -c Release --nologo
 
       # Protocol, stat engine, dispatch, settings and session edge cases; no game needed.
       - name: Stress and edge-case tests

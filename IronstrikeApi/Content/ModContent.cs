@@ -23,6 +23,10 @@ public static class ModContent
 {
     static readonly Dictionary<string, CustomSkill> skills = new(StringComparer.Ordinal);
     static readonly Dictionary<int, CustomSkill> skillsById = new();
+    static readonly Dictionary<string, CustomSpell> spells = new(StringComparer.Ordinal);
+    static readonly Dictionary<int, CustomSpell> spellsById = new();
+    static readonly Dictionary<string, CustomSchool> schools = new(StringComparer.Ordinal);
+    static readonly Dictionary<int, CustomSchool> schoolsById = new();
     static bool frozen;
     static byte[] manifest = Array.Empty<byte>();
 
@@ -37,7 +41,7 @@ public static class ModContent
         string problem = ContentIds.Validate(key);
         if (problem != null) throw new ArgumentException($"skill key '{key}': {problem}", nameof(key));
         if (frozen) throw new InvalidOperationException($"skill '{key}' registered after the game started; register in your plugin's Load()");
-        if (skills.ContainsKey(key)) throw new ArgumentException($"skill '{key}' is already registered", nameof(key));
+        if (skills.ContainsKey(key) || schools.ContainsKey(key)) throw new ArgumentException($"skill '{key}' is already registered", nameof(key));
         var s = new CustomSkill(key);
         configure?.Invoke(s);
         problem = s.Problem();
@@ -45,6 +49,69 @@ public static class ModContent
         skills[key] = s;
         return s;
     }
+
+    /// <summary>
+    /// Registers a spell. It reaches players through a <see cref="School"/> that lists it.
+    /// </summary>
+    /// <param name="key">A unique key with your mod's prefix.</param>
+    /// <param name="configure">Sets the spell up: name, icon, aiming, costs, and what it does.</param>
+    public static CustomSpell Spell(string key, Action<CustomSpell> configure)
+    {
+        string problem = ContentIds.Validate(key);
+        if (problem != null) throw new ArgumentException($"spell key '{key}': {problem}", nameof(key));
+        if (frozen) throw new InvalidOperationException($"spell '{key}' registered after the game started; register in your plugin's Load()");
+        if (spells.ContainsKey(key)) throw new ArgumentException($"spell '{key}' is already registered", nameof(key));
+        var s = new CustomSpell(key);
+        configure?.Invoke(s);
+        problem = s.Problem();
+        if (problem != null) throw new ArgumentException($"spell '{key}': {problem}");
+        spells[key] = s;
+        return s;
+    }
+
+    /// <summary>
+    /// Registers a magic school: an upgrade for casters that teaches two spells registered with
+    /// <see cref="Spell"/> (register those first).
+    /// </summary>
+    /// <param name="key">A unique key with your mod's prefix.</param>
+    /// <param name="configure">Sets the school up: name, icon, rune shapes and its two spells.</param>
+    public static CustomSchool School(string key, Action<CustomSchool> configure)
+    {
+        string problem = ContentIds.Validate(key);
+        if (problem != null) throw new ArgumentException($"school key '{key}': {problem}", nameof(key));
+        if (frozen) throw new InvalidOperationException($"school '{key}' registered after the game started; register in your plugin's Load()");
+        if (schools.ContainsKey(key) || skills.ContainsKey(key)) throw new ArgumentException($"school '{key}' is already registered", nameof(key));
+        var s = new CustomSchool(key);
+        configure?.Invoke(s);
+        problem = s.Problem();
+        if (problem != null) throw new ArgumentException($"school '{key}': {problem}");
+        foreach (var k in s.Spells)
+        {
+            var sp = GetSpell(k) ?? throw new ArgumentException($"school '{key}': no spell '{k}' (register spells before their school)");
+            if (sp.School != null) throw new ArgumentException($"school '{key}': spell '{k}' is already taught by '{sp.School.Key}'");
+        }
+        if (s.Spells[0] == s.Spells[1]) throw new ArgumentException($"school '{key}': its two spells must differ");
+        foreach (var other in schools.Values)
+            if (other.Runes == s.Runes)
+                throw new ArgumentException($"school '{key}': the runes of {s.Runes} are already used by '{other.Key}'");
+        foreach (var k in s.Spells) spells[k].School = s;
+        schools[key] = s;
+        return s;
+    }
+
+    /// <summary>Every registered spell.</summary>
+    public static IReadOnlyCollection<CustomSpell> Spells => spells.Values;
+
+    /// <summary>Every registered school.</summary>
+    public static IReadOnlyCollection<CustomSchool> Schools => schools.Values;
+
+    /// <summary>The spell registered under a key, or null.</summary>
+    /// <param name="key">Its key.</param>
+    public static CustomSpell GetSpell(string key) => key != null && spells.TryGetValue(key, out var s) ? s : null;
+
+    /// <summary>The school registered under a key, or null.</summary>
+    /// <param name="key">Its key.</param>
+    public static CustomSchool GetSchool(string key) => key != null && schools.TryGetValue(key, out var s) ? s : null;
 
     /// <summary>Every registered skill.</summary>
     public static IReadOnlyCollection<CustomSkill> Skills => skills.Values;
@@ -78,6 +145,21 @@ public static class ModContent
         return true;
     }
 
+    /// <summary>Gives a fighter a custom magic school (and so its two spells) at a level.</summary>
+    /// <param name="fighter">Who gets it; null means the local player.</param>
+    /// <param name="key">The school's key.</param>
+    /// <param name="level">1 to the school's MaxLevel.</param>
+    public static bool GiveSchool(Fighter fighter, string key, int level = 1)
+    {
+        var s = GetSchool(key) ?? throw new ArgumentException($"no school '{key}'", nameof(key));
+        if (!Active) { ApiLog.WarnOnce(null, "content:inactive:give", "custom content is off in this game; school not given"); return false; }
+        Freeze();
+        fighter ??= Gameplay.Players.LocalFighter;
+        if (fighter is null || SkillManager.instance == null) return false;
+        SkillManager.instance.GiveSkillToFighter(s.Type, fighter, Math.Clamp(level, 1, s.MaxLevel));
+        return true;
+    }
+
     /// <summary>Takes a custom skill away.</summary>
     /// <param name="fighter">From whom; null means the local player.</param>
     /// <param name="key">The skill's key.</param>
@@ -104,6 +186,11 @@ public static class ModContent
     // ------------------------------------------------------------------ internals
 
     internal static CustomSkill ById(int id) => skillsById.TryGetValue(id, out var s) ? s : null;
+    internal static CustomSpell SpellById(int id) => spellsById.TryGetValue(id, out var s) ? s : null;
+    internal static CustomSchool SchoolById(int id) => schoolsById.TryGetValue(id, out var s) ? s : null;
+
+    // The name a skill id shows on cards: a custom skill's or school's; null for the game's own.
+    internal static string SkillName(int id) => ById(id)?.Name ?? SchoolById(id)?.Name;
 
     internal static byte[] Manifest => manifest;
 
@@ -116,22 +203,35 @@ public static class ModContent
     {
         if (frozen) return;
         frozen = true;
-        var taken = new HashSet<int>(Enum.GetValues(typeof(SkillType)).Cast<object>().Select(v => Convert.ToInt32(v)));
-        if (existing != null) taken.UnionWith(existing);
-        var ids = ContentIds.Allocate(skills.Keys, taken);
-        foreach (var kv in ids)
+        var takenSkills = new HashSet<int>(Enum.GetValues(typeof(SkillType)).Cast<object>().Select(v => Convert.ToInt32(v)));
+        if (existing != null) takenSkills.UnionWith(existing);
+        // Skills and schools share the game's skill ids; spells have their own.
+        var skillIds = ContentIds.Allocate(skills.Keys.Concat(schools.Keys), takenSkills);
+        foreach (var kv in skillIds)
         {
-            skills[kv.Key].Id = kv.Value;
-            skillsById[kv.Value] = skills[kv.Key];
+            if (skills.TryGetValue(kv.Key, out var sk)) { sk.Id = kv.Value; skillsById[kv.Value] = sk; }
+            else { schools[kv.Key].Id = kv.Value; schoolsById[kv.Value] = schools[kv.Key]; }
         }
-        manifest = skills.Count == 0 ? Array.Empty<byte>() : ContentIds.Manifest(skills.Values.Select(s => ("skill", s.Key, s.Id)));
-        if (skills.Count > 0)
-            Diag.Info($"content: {skills.Count} custom skill(s) registered, ids {string.Join(", ", skills.Values.OrderBy(s => s.Id).Select(s => $"{s.Key}={s.Id}"))}");
+        var takenSpells = new HashSet<int>(Enum.GetValues(typeof(SpellType)).Cast<object>().Select(v => Convert.ToInt32(v)));
+        foreach (var kv in ContentIds.Allocate(spells.Keys, takenSpells))
+        {
+            spells[kv.Key].Id = kv.Value;
+            spellsById[kv.Value] = spells[kv.Key];
+        }
+        var entries = skills.Values.Select(s => ("skill", s.Key, s.Id))
+            .Concat(schools.Values.Select(s => ("school", s.Key, s.Id)))
+            .Concat(spells.Values.Select(s => ("spell", s.Key, s.Id))).ToList();
+        manifest = entries.Count == 0 ? Array.Empty<byte>() : ContentIds.Manifest(entries);
+        if (entries.Count > 0)
+            Diag.Info($"content: {skills.Count} skill(s), {schools.Count} school(s), {spells.Count} spell(s); ids " +
+                      string.Join(", ", entries.OrderBy(e => e.Item1).ThenBy(e => e.Item3).Select(e => $"{e.Item2}={e.Item3}")));
     }
+
+    internal static bool Any => skills.Count + schools.Count + spells.Count > 0;
 
     // For the unit tests.
     internal static void ResetForTests()
     {
-        skills.Clear(); skillsById.Clear(); frozen = false; manifest = Array.Empty<byte>(); Mismatch = false;
+        skills.Clear(); skillsById.Clear(); spells.Clear(); spellsById.Clear(); schools.Clear(); schoolsById.Clear(); frozen = false; manifest = Array.Empty<byte>(); Mismatch = false;
     }
 }

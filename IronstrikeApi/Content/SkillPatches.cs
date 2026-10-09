@@ -43,7 +43,7 @@ internal static class SkillPatches
     [HarmonyPatch(typeof(SkillDatabase), nameof(SkillDatabase.GetSkillDict))]
     static void FileTemplates(ref Il2CppSystem.Collections.Generic.Dictionary<SkillType, Skill> __result)
     {
-        if (!injected || __result == null || ModContent.Skills.Count == 0) return;
+        if (!injected || __result == null || !ModContent.Any) return;
         if (!ModContent.Frozen)
         {
             var existing = new List<int>();
@@ -56,6 +56,7 @@ internal static class SkillPatches
             var t = Template(d);
             if (t != null) __result[d.Type] = t;
         }
+        SpellPatches.FileSchools(__result);
     }
 
     static Skill Template(CustomSkill d)
@@ -99,18 +100,25 @@ internal static class SkillPatches
     [HarmonyPatch(typeof(Skill), nameof(Skill.GetName))]
     static void Name(Skill __instance, ref string __result)
     {
-        if (__instance is null) return;
-        var d = ModContent.ById((int)__instance.skillType);
-        if (d != null) __result = d.Name;
+        var n = CustomName(__instance);
+        if (n != null) __result = n;
+    }
+
+    // A spell's skillType is its school's, so spells are told apart first.
+    static string CustomName(Skill s)
+    {
+        if (s is null || !ModContent.Any) return null;
+        var sp = s.TryCast<Spell>();
+        if (sp is not null) return ModContent.SpellById((int)sp.spellType)?.Name;
+        return ModContent.SkillName((int)s.skillType);
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(Skill), nameof(Skill.GetFancyName))]
     static void FancyName(Skill __instance, ref string __result)
     {
-        if (__instance is null) return;
-        var d = ModContent.ById((int)__instance.skillType);
-        if (d != null) __result = d.Name + " " + Roman(__instance.level);
+        var n = CustomName(__instance);
+        if (n != null) __result = __instance.TryCast<Spell>() is not null ? n : n + " " + Roman(__instance.level);
     }
 
     internal static string Roman(int level) => level switch
@@ -135,14 +143,20 @@ internal static class SkillPatches
     // the game's picks counts 1, a custom skill its OfferWeight. The number of cards never changes.
     static void Mix(Fighter fighter, SkillCategory category, Il2CppSystem.Collections.Generic.List<SkillType> list)
     {
-        if (!injected || list == null || fighter is null || !ModContent.Active || ModContent.Skills.Count == 0) return;
+        if (!injected || list == null || fighter is null || !ModContent.Active || (ModContent.Skills.Count == 0 && ModContent.Schools.Count == 0)) return;
         try
         {
             var game = new List<int>();
-            for (int i = 0; i < list.Count; i++) game.Add((int)list[i]);
             var owned = OwnedLevels(fighter);
-            var offers = Offers(game, ModContent.Skills.Select(d => (d, Eligible(d, fighter, category, owned))).Where(x => x.Item2).Select(x => x.d).ToList(), rng);
-            if (offers.SequenceEqual(game)) return;
+            // A game school whose runes an owned custom school uses is never offered.
+            var blocked = new HashSet<int>(ModContent.Schools.Where(sc => sc.Id != 0 && owned.ContainsKey(sc.Id)).Select(sc => (int)sc.Runes));
+            var original = new List<int>();
+            for (int i = 0; i < list.Count; i++) original.Add((int)list[i]);
+            game.AddRange(original.Where(id => !blocked.Contains(id)));
+            var candidates = ModContent.Skills.Where(d => Eligible(d, fighter, category, owned)).Select(d => (d.Id, d.OfferWeight))
+                .Concat(ModContent.Schools.Where(d => EligibleSchool(d, fighter, category, owned)).Select(d => (d.Id, d.OfferWeight))).ToList();
+            var offers = OffersBy(game, candidates, rng);
+            if (offers.SequenceEqual(original)) return;
             list.Clear();
             foreach (var id in offers) list.Add((SkillType)id);
         }
@@ -172,14 +186,24 @@ internal static class SkillPatches
         return true;
     }
 
-    // Weighted draw without replacement over the game's picks (weight 1 each) and the candidates.
+    internal static bool EligibleSchool(CustomSchool d, Fighter f, SkillCategory category, Dictionary<int, int> owned)
+    {
+        if (d.Id == 0 || d.OfferWeight <= 0 || d.Category != category || f.fighterClass != SkillClass.Caster) return false;
+        if (owned.TryGetValue(d.Id, out int lvl) && lvl >= d.MaxLevel) return false;
+        return !owned.ContainsKey((int)d.Runes);
+    }
+
     internal static List<int> Offers(List<int> game, List<CustomSkill> candidates, System.Random random)
+        => OffersBy(game, candidates.Select(c => (c.Id, c.OfferWeight)).ToList(), random);
+
+    // Weighted draw without replacement over the game's picks (weight 1 each) and the candidates.
+    internal static List<int> OffersBy(List<int> game, List<(int Id, float Weight)> candidates, System.Random random)
     {
         // The game's PickUpgradeSkillsFor2 builds on PickUpgradeSkillsFor, so one offer can pass through
         // here twice: a custom skill already in the list must not be offered again.
         candidates = candidates.Where(c => !game.Contains(c.Id)).ToList();
         if (candidates.Count == 0 || game.Count == 0) return game;
-        var pool = game.Select(id => (Id: id, W: 1f)).Concat(candidates.Select(c => (Id: c.Id, W: c.OfferWeight))).ToList();
+        var pool = game.Select(id => (Id: id, W: 1f)).Concat(candidates.Select(c => (Id: c.Id, W: c.Weight))).ToList();
         var picked = new List<int>();
         while (picked.Count < game.Count && pool.Count > 0)
         {

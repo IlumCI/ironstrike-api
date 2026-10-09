@@ -108,6 +108,9 @@ internal static class SessionHooks
         ModNet.Reset();
         ModContent.Mismatch = false;
         Content.SkillHost.Clear();
+        Content.SpellHost.Clear();
+        Content.SpellEffects.Fade.Clear();
+        Content.SpellEffects.Later.Clear();
         GameEvents.RaiseSessionEnded(s.Change);
     }
 

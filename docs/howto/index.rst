@@ -13,5 +13,6 @@ Each guide covers one job in depth. They assume you have read the :ref:`tutorial
    stats.rst
    damage.rst
    bots.rst
+   content.rst
    porting.rst
    il2cpp.rst

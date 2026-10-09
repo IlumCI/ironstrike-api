@@ -195,3 +195,83 @@ public class IconCanvasTests
     [InlineData(1, 1, 2)]
     public void Drawings_get_the_games_margin(int w, int h, int side) => Assert.Equal(side, Icons.Canvas(w, h));
 }
+
+[Collection("ModContent")]
+public class SpellRegistryTests : IDisposable
+{
+    public SpellRegistryTests() => ModContent.ResetForTests();
+    public void Dispose() => ModContent.ResetForTests();
+
+    static void TwoSpells(string a = "t.one", string b = "t.two")
+    {
+        ModContent.Spell(a, s => s.Name = "One");
+        ModContent.Spell(b, s => { s.Name = "Two"; s.Targeting = SpellTargetingType.GroundCircle; });
+    }
+
+    [Fact]
+    public void A_school_teaches_two_registered_spells()
+    {
+        TwoSpells();
+        var sc = ModContent.School("t.school", s => { s.Spells.Add("t.one"); s.Spells.Add("t.two"); });
+        Assert.Same(sc, ModContent.GetSpell("t.one").School);
+        Assert.Same(sc, ModContent.GetSpell("t.two").School);
+    }
+
+    [Fact]
+    public void School_mistakes_are_caught_at_registration()
+    {
+        TwoSpells();
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.a", s => s.Spells.Add("t.one")));                                  // one spell
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.b", s => { s.Spells.Add("t.one"); s.Spells.Add("t.nope"); }));     // unknown spell
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.c", s => { s.Spells.Add("t.one"); s.Spells.Add("t.one"); }));      // same twice
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.d", s => { s.Spells.Add("t.one"); s.Spells.Add("t.two"); s.Runes = SkillType.Toughness; }));
+        ModContent.School("t.e", s => { s.Spells.Add("t.one"); s.Spells.Add("t.two"); });
+        ModContent.Spell("t.three", s => { });
+        ModContent.Spell("t.four", s => { });
+        // Spells already taught, and runes already taken (both default to Storm).
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.f", s => { s.Spells.Add("t.one"); s.Spells.Add("t.three"); s.Runes = SkillType.FireMagic; }));
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.g", s => { s.Spells.Add("t.three"); s.Spells.Add("t.four"); }));
+        ModContent.School("t.h", s => { s.Spells.Add("t.three"); s.Spells.Add("t.four"); s.Runes = SkillType.FireMagic; });
+    }
+
+    [Fact]
+    public void Spell_mistakes_are_caught_at_registration()
+    {
+        Assert.Throws<ArgumentException>(() => ModContent.Spell("t.x", s => s.Cooldown = new float[0]));
+        Assert.Throws<ArgumentException>(() => ModContent.Spell("t.y", s => s.ManaCost = new[] { -1f }));
+        Assert.Throws<ArgumentException>(() => ModContent.Spell("t.z", s => s.Targeting = SpellTargetingType.None));
+        Assert.Throws<ArgumentException>(() => ModContent.Spell("nodot", s => { }));
+        ModContent.Spell("t.ok", s => { });
+        Assert.Throws<ArgumentException>(() => ModContent.Spell("t.ok", s => { }));
+    }
+
+    [Fact]
+    public void Schools_share_the_skill_ids_and_spells_have_their_own()
+    {
+        TwoSpells();
+        ModContent.School("t.school", s => { s.Spells.Add("t.one"); s.Spells.Add("t.two"); });
+        ModContent.Skill("t.skill", s => { });
+        ModContent.Freeze();
+        var school = ModContent.GetSchool("t.school");
+        var skill = ModContent.GetSkill("t.skill");
+        Assert.NotEqual(school.Id, skill.Id);
+        Assert.All(new[] { school.Id, skill.Id }, id => Assert.False(Enum.IsDefined(typeof(SkillType), id)));
+        Assert.All(new[] { ModContent.GetSpell("t.one").Id, ModContent.GetSpell("t.two").Id }, id =>
+        {
+            Assert.InRange(id, 1, 255);
+            Assert.False(Enum.IsDefined(typeof(SpellType), id));
+        });
+        Assert.Equal(8, ModContent.Manifest.Length);
+        Assert.Throws<InvalidOperationException>(() => ModContent.Spell("t.late", s => { }));
+    }
+
+    [Fact]
+    public void Per_level_values_repeat_the_last()
+    {
+        var v = new[] { 10f, 8f };
+        Assert.Equal(10f, CustomSpell.At(v, 1));
+        Assert.Equal(8f, CustomSpell.At(v, 2));
+        Assert.Equal(8f, CustomSpell.At(v, 5));
+        Assert.Equal(10f, CustomSpell.At(v, 0));
+    }
+}

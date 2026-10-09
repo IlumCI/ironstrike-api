@@ -40,8 +40,11 @@ both must keep working alongside it unchanged.
 | `IronstrikeApi/Events/` | `GameEvents` (public), `Hooks` (polling plus hooks), `SessionHooks` (also sets `Safety.Context`) |
 | `IronstrikeApi/Gameplay/` | `Stats`, `DamageEvent`/`ProjectileEvent` and their hooks, `Players`, `Bots`, `Status`, `Loadout` |
 | `IronstrikeApi/Net/ModNet.cs` | channels over Fusion reliable data |
+| `IronstrikeApi/Content/` | custom content: `ModContent` (registry, ids, fingerprint), `CustomSkill`/`ApiSkill`/`SkillPatches`, `CustomSpell`/`CustomSchool`/`ApiSpell`/`SpellPatches`/`SpellCast`, `RuneTree`, `Icons`, `GcScan`; debug runners `ContentTest`, `SpellProbe` |
+| `IronstrikeApi/Assets/Icons/` | the icon library, embedded; drawn by `art/icons/make_icons.py` (Pillow) |
 | `IronstrikeApi/Ui/` | `Kit` (public drawing kit, from Servers), `Panel` (internal window host), `Window`, `Page`, `TextInput`, `MainMenu`, `ModSettings`, `ModsWindow` |
 | `examples/HelloMod/` | the example the tutorial walks through; CI builds it |
+| `examples/Arcana/` | five schools, ten spells on the content API; CI builds it |
 | `docs/` | Sphinx site (python-docs-theme); `docs/_ext/csdomain.py` is a small C# domain; `docs/tools/RefGen` generates `docs/reference/api/` from the DLL and its XML docs |
 
 ## 3. Contracts that must not break
@@ -57,6 +60,12 @@ both must keep working alongside it unchanged.
   because they handle those buttons themselves (Servers rebinds them every second).
 - **Gameplay helpers check `Safety.GameplayAllowed`.** Every new helper that changes the game must
   call `Safety.Check` first.
+- **Custom content ids are deterministic:** sorted keys of every mod, from 255 down, skipping the
+  game's enums; skills and schools share the skill space, spells have their own. The greeting payload
+  is the content fingerprint (`ContentIds.Manifest`); a mismatch turns content off for the session.
+- **Injected classes stay nested** (`Injected.ApiSkill`, `Injected.ApiSpell`) and are marked for GC
+  scanning (`GcScan`). Never call `base.X()` from their overrides; `SpellHost.Init` runs the game's
+  `Spell.Init` through its `MethodInfo` instead.
 - **ModNet never sends data to a peer that has not greeted back,** and never in `Public`. The game's
   `NetworkLogic.OnReliableDataReceived` is empty, so a vanilla peer ignores the greeting.
 
@@ -121,6 +130,12 @@ Main-menu pills are copies of the HOST pill:
   3. Reads `ReliableDataTransferModes`, opens the Mods window and spawns a dummy.
   4. Starts a solo run with `PressSolo` and hurts the bots twice.
   5. Leaves and logs event counts (`self-test [...]` lines).
+- **`ContentTest`:** registers a test skill per upgrade category, gives one, screenshots the real
+  upgrade screen (`BepInEx/debug-shots`), runs a fight and logs which hooks fired.
+- **`SpellProbe`:** registers a test school (Fire runes), checks templates, attributes and the rune
+  grid copy, casts through the wand, then fires every registered spell's synced event at a bot and
+  logs health, statuses and failures. Writes `BepInEx/spell-probe.txt`.
+- **`DumpIcons`:** writes every game skill and spell icon to `debug-shots/icons`.
 - **`LogEvents`:** logs every event, with counts and enums only.
 - **`AutoOpenAfterSeconds`:** opens the Mods window for screenshots.
 
@@ -239,13 +254,13 @@ Facts learned:
 
 ## 10. Open work
 
-- **A game update (security and networking, public lobbies) was released on 2026-10-07, mid-work.**
-  Everything in this file was verified against the build before it. After updating:
-  - Regenerate `refs/` from the game's new `BepInEx/interop`.
-  - Re-run the unit tests and the `[09 Debug] StressTest` suite.
-  - Re-check every `PATCH LIVE` line: signatures, inlining, `NetworkRunner.StartGame`, the
-    reliable-data receive method, the PressPlay/PressHost/matchmaking lockout.
-  - Re-check the Servers mod's lobby and token handling.
+- **Game build 25763736 (2026-10-07 update):** refs regenerated, all hooks `PATCH LIVE`, stress
+  suite 26/26. The update changed content and ban hardening only.
+- **Custom content, verified in game (flat):** skills on the real upgrade screen with library icons;
+  hooks in a fight; a school's spells through `GetSpell`, with per-level cooldown/mana/range; a cast
+  through the wand; every Arcana spell's synced event against a bot. **Not verified:** drawing a
+  custom school's runes in VR (needs a headset), Flak Shot and Plague Cloud hitting (the wand sits
+  on the floor flat), two players with content.
 - **Unsolved: some windows opened in front of the camera do not render, flat under Proton.**
   - **What fails:** text-only pages and tables, opened with `Window.Open()` and no anchor, at any
     time in the haven.

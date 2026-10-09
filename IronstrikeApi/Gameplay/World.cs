@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Fusion;
+using UnityEngine;
 
 namespace IronstrikeApi.Gameplay;
 
@@ -265,5 +266,45 @@ public static class Loadout
         if (!Safety.Check(null, "Loadout.GiveWeaponSet") || set == null || GM.instance == null) return false;
         GM.instance.GivePlayerWeaponSet(set);
         return true;
+    }
+}
+
+/// <summary>
+/// Where a fighter really is. A fighter's own transform is not its body (verified: a bot's transform
+/// stays put while its body walks about), so use these for positions, distances and aiming.
+/// </summary>
+public static class Body
+{
+    static FighterIKRig Rig(Fighter f) => f.LogicBody ?? f.VisualBody;
+
+    /// <summary>The point between the fighter's feet, on the ground.</summary>
+    /// <param name="f">The fighter.</param>
+    public static Vector3 Feet(Fighter f)
+    {
+        if (f == null) return Vector3.zero;
+        var r = Rig(f);
+        if (r != null && r.FeetNode != null) return r.FeetNode.position;
+        if (r != null && r.BodyCenterNode != null) { var c = r.BodyCenterNode.position; c.y -= 1f; return c; }
+        return f.transform.position;
+    }
+
+    /// <summary>The middle of the fighter's body: where to aim bolts and beams.</summary>
+    /// <param name="f">The fighter.</param>
+    public static Vector3 Center(Fighter f)
+    {
+        if (f == null) return Vector3.zero;
+        var r = Rig(f);
+        if (r != null && r.BodyCenterNode != null) return r.BodyCenterNode.position;
+        return Feet(f) + Vector3.up;
+    }
+
+    /// <summary>The fighter's head.</summary>
+    /// <param name="f">The fighter.</param>
+    public static Vector3 Head(Fighter f)
+    {
+        if (f == null) return Vector3.zero;
+        var r = Rig(f);
+        if (r != null && r.Head != null) return r.Head.position;
+        return Center(f) + Vector3.up * 0.6f;
     }
 }

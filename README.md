@@ -8,6 +8,9 @@ turns the game's internals into documented C# you can build on:
   the others down.
 - **Gameplay hooks.** Stat modifiers that stack between mods, damage you can change or cancel,
   status effects, skills, weapon sets and bots.
+- **New content.** Skills on the upgrade screen, magic schools for casters and the spells they
+  teach, drawn on the wand's rune grid and cast like the game's own, with a library of icons drawn
+  in the game's style. The [Arcana](examples/Arcana) example adds five schools and ten spells.
 - **A window toolkit.** Windows in the classic Steam style, built on a copy of the game's own
   Options window, so they work the same in VR and flat. Pages are built from check boxes, steppers,
   pickers, tables and buttons, and text entry uses the game's VR keyboard.

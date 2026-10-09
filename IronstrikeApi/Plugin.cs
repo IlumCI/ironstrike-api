@@ -20,7 +20,7 @@ public static class ModApi
     public const string Name = "IRONSTRIKE Mod API";
 
     /// <summary>The API version, <c>major.minor.patch</c>. Minor bumps add; major bumps break.</summary>
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 
     /// <summary>
     /// True once the game's main loop is running and every hook has had its chance to install.
@@ -61,7 +61,9 @@ public class Plugin : BasePlugin
         Core.SelfTest.Register();
         Core.StressTest.Register();
         Content.ContentTest.Register();
+        Content.SpellProbe.Register();
         Content.SkillPatches.Install();
+        Content.SpellPatches.Install();
         Log.LogInfo($"{ModApi.Name} v{ModApi.Version} loaded.");
     }
 }
@@ -70,7 +72,7 @@ internal sealed class Cfg
 {
     public readonly ConfigEntry<bool> EnableHotkeys, MenuButton;
     public readonly ConfigEntry<float> AutoOpenAfter;
-    public readonly ConfigEntry<bool> SelfTest, StressTest, ContentTest, DumpIcons, LogEvents;
+    public readonly ConfigEntry<bool> SelfTest, StressTest, ContentTest, SpellProbe, DumpIcons, LogEvents;
 
     public Cfg(ConfigFile f)
     {
@@ -89,6 +91,9 @@ internal sealed class Cfg
         ContentTest = f.Bind("09 Debug", "ContentTest", false, new ConfigDescription(
             "Debug aid: register test skills and drive them through the upgrade screen and a fight (solo run).\n"
             + "Writes screenshots to BepInEx/debug-shots. Turn off afterwards.", null, ModSettings.Hidden));
+        SpellProbe = f.Bind("09 Debug", "SpellProbe", false, new ConfigDescription(
+            "Debug aid: dump the game's spells and rune tree to BepInEx/spell-probe.txt and cast one from code (solo).",
+            null, ModSettings.Hidden));
         DumpIcons = f.Bind("09 Debug", "DumpIcons", false, new ConfigDescription(
             "Debug aid: write every skill and spell icon to BepInEx/debug-shots/icons as PNG.", null, ModSettings.Hidden));
         LogEvents = f.Bind("09 Debug", "LogEvents", false,
