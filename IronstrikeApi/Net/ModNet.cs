@@ -112,6 +112,13 @@ public static class ModNet
             ch.Raise(new NetMessage { Channel = ch, Data = payload, Sender = transport.Ref(origin), FromHost = fromHost });
         };
         Core.PeerReady = id => Safe.Run(PeerReady, "PeerReady", transport.Ref(id));
+        Core.Manifest = () => ModContent.Manifest;
+        Core.ManifestMismatch = id =>
+        {
+            if (ModContent.Mismatch) return;
+            ModContent.Mismatch = true;
+            Diag.Warn($"content: player #{id} has different custom content (different mods or versions); custom content is off for this session");
+        };
     }
 
     /// <summary>

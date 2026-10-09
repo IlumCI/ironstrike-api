@@ -27,6 +27,11 @@
   <!-- Reference assemblies. refs/ is committed so CI and a clean clone can build with no
        game files present. Override with -p:InteropDir=<path to BepInEx/interop> to build
        against the set the game actually generated at runtime. -->
+  <!-- The icon library (drawn by art/icons/make_icons.py), shipped inside the DLL. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/Icons/*.png" LogicalName="IronstrikeApi.Icons.%(Filename).png" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(InteropDir)' == ''">
     <InteropDir>$(MSBuildThisFileDirectory)../refs</InteropDir>
   </PropertyGroup>
@@ -40,6 +45,8 @@
     <Reference Include="$(InteropDir)/Unity.TextMeshPro.dll" Private="false" />
     <Reference Include="$(InteropDir)/UnityEngine.UIModule.dll" Private="false" />
     <Reference Include="$(InteropDir)/UnityEngine.UI.dll" Private="false" />
+    <Reference Include="$(InteropDir)/UnityEngine.ScreenCaptureModule.dll" Private="false" />
+    <Reference Include="$(InteropDir)/UnityEngine.ImageConversionModule.dll" Private="false" />
     <Reference Include="$(InteropDir)/Il2Cppmscorlib.dll" Private="false" />
     <Reference Include="$(InteropDir)/Fusion.Runtime.dll" Private="false" />
     <Reference Include="$(InteropDir)/Fusion.Common.dll" Private="false" />

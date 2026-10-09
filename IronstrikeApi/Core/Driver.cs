@@ -53,6 +53,8 @@ internal static class Driver
         MaybeAutoOpen(now);
         SelfTest.Tick(now);
         StressTest.Tick(now);
+        Step(IconDump.Tick, "icon dump");
+        Step(() => Content.ContentTest.Tick(now), "content test");
     }
 
     static readonly System.Collections.Generic.HashSet<string> failedSteps = new();

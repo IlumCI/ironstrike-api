@@ -60,6 +60,8 @@ public class Plugin : BasePlugin
         Ui.ModsWindow.Register();
         Core.SelfTest.Register();
         Core.StressTest.Register();
+        Content.ContentTest.Register();
+        Content.SkillPatches.Install();
         Log.LogInfo($"{ModApi.Name} v{ModApi.Version} loaded.");
     }
 }
@@ -68,7 +70,7 @@ internal sealed class Cfg
 {
     public readonly ConfigEntry<bool> EnableHotkeys, MenuButton;
     public readonly ConfigEntry<float> AutoOpenAfter;
-    public readonly ConfigEntry<bool> SelfTest, StressTest, LogEvents;
+    public readonly ConfigEntry<bool> SelfTest, StressTest, ContentTest, DumpIcons, LogEvents;
 
     public Cfg(ConfigFile f)
     {
@@ -84,6 +86,11 @@ internal sealed class Cfg
         StressTest = f.Bind("09 Debug", "StressTest", false, new ConfigDescription(
             "Debug aid: run the in-game edge-case suite (windows, controls, hooks, a scene change, damage).\n"
             + "Logs 'stress: PASS/FAIL' per case. Turn off afterwards.", null, ModSettings.Hidden));
+        ContentTest = f.Bind("09 Debug", "ContentTest", false, new ConfigDescription(
+            "Debug aid: register test skills and drive them through the upgrade screen and a fight (solo run).\n"
+            + "Writes screenshots to BepInEx/debug-shots. Turn off afterwards.", null, ModSettings.Hidden));
+        DumpIcons = f.Bind("09 Debug", "DumpIcons", false, new ConfigDescription(
+            "Debug aid: write every skill and spell icon to BepInEx/debug-shots/icons as PNG.", null, ModSettings.Hidden));
         LogEvents = f.Bind("09 Debug", "LogEvents", false,
             "Debug aid: log every API event as it fires (no names, codes or ids).");
     }

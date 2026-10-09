@@ -106,6 +106,8 @@ internal static class SessionHooks
         s.Change.Reason = reason;
         Safety.Context = PlayContext.Offline;
         ModNet.Reset();
+        ModContent.Mismatch = false;
+        Content.SkillHost.Clear();
         GameEvents.RaiseSessionEnded(s.Change);
     }
 

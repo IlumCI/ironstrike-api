@@ -50,6 +50,8 @@ internal sealed class NetCore
     public Func<uint, bool> HasChannel = _ => true;
     public Action<uint, int, bool, byte[]> Deliver;       // channel, origin, fromHost, payload
     public Action<int> PeerReady;
+    public Func<byte[]> Manifest = () => Array.Empty<byte>();   // carried in the greeting
+    public Action<int> ManifestMismatch;                         // a peer's content differs from ours
     public Action<string> Info = _ => { }, Warn = _ => { };
 
     public int Dropped { get; private set; }
@@ -182,7 +184,7 @@ internal sealed class NetCore
             if (greeted.Contains(id) || n >= GreetTries) { greetAt.Remove(id); tries.Remove(id); continue; }
             tries[id] = n + 1;
             greetAt[id] = now + GreetEvery;
-            try { t.SendToPlayer(id, Build(THello, 0, t.LocalId, id, null)); }
+            try { t.SendToPlayer(id, Build(THello, 0, t.LocalId, id, Manifest())); }
             catch (Exception e) { Warn($"could not greet a player: {e.Message}"); }
         }
     }
@@ -218,6 +220,10 @@ internal sealed class NetCore
 
         if (type == THello)
         {
+            var theirs = new byte[b.Length - Header];
+            Buffer.BlockCopy(b, Header, theirs, 0, theirs.Length);
+            var ours = Manifest() ?? Array.Empty<byte>();
+            if (!theirs.AsSpan().SequenceEqual(ours)) ManifestMismatch?.Invoke(t.IsServer ? from : origin);
             if (t.IsServer)
             {
                 if (greeted.Add(from))
@@ -231,7 +237,7 @@ internal sealed class NetCore
             else
             {
                 // Answer every greeting, so a lost answer is retried with the host's next greeting.
-                t.SendToServer(Build(THello, 0, t.LocalId, ToHost, null));
+                t.SendToServer(Build(THello, 0, t.LocalId, ToHost, Manifest()));
                 if (!hostGreeted)
                 {
                     hostGreeted = true;

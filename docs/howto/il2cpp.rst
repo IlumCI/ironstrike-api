@@ -44,6 +44,21 @@ are patched per instantiation. **Burst-compiled code** cannot be patched.
    ``args.PlayerCount`` dies in ``Il2CppSystem.ValueType..ctor``. Setting one with
    ``new Il2CppSystem.Nullable<int>(4)`` works.
 
+**A top-level class deriving from a game type makes BepInEx skip your whole plugin.**
+   BepInEx finds plugins by walking the base classes of every *top-level* type in your DLL with
+   Mono.Cecil. Its resolver looks in the working directory first, which is the game's folder, and
+   finds the game's *native* ``GameAssembly.dll`` before the interop one. Cecil throws
+   ``BadImageFormatException``, BepInEx logs "not a valid .NET assembly" at Debug level only, and
+   your plugin silently never loads; anything depending on it fails with "missing dependencies".
+   Nest such classes inside a static class: nested types are never examined.
+
+   .. code-block:: csharp
+
+      internal static class Injected
+      {
+          internal class MySkill : Skill { /* ... */ }
+      }
+
 Objects and delegates
 =====================
 
