@@ -20,7 +20,7 @@ public static class ModApi
     public const string Name = "IRONSTRIKE Mod API";
 
     /// <summary>The API version, <c>major.minor.patch</c>. Minor bumps add; major bumps break.</summary>
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
 
     /// <summary>
     /// True once the game's main loop is running and every hook has had its chance to install.
