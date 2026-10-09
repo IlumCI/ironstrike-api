@@ -91,9 +91,6 @@ public static class ModContent
             if (sp.School != null) throw new ArgumentException($"school '{key}': spell '{k}' is already taught by '{sp.School.Key}'");
         }
         if (s.Spells[0] == s.Spells[1]) throw new ArgumentException($"school '{key}': its two spells must differ");
-        foreach (var other in schools.Values)
-            if (other.Runes == s.Runes)
-                throw new ArgumentException($"school '{key}': the runes of {s.Runes} are already used by '{other.Key}'");
         foreach (var k in s.Spells) spells[k].School = s;
         schools[key] = s;
         return s;
@@ -148,15 +145,16 @@ public static class ModContent
     /// <summary>Gives a fighter a custom magic school (and so its two spells) at a level.</summary>
     /// <param name="fighter">Who gets it; null means the local player.</param>
     /// <param name="key">The school's key.</param>
-    /// <param name="level">1 to the school's MaxLevel.</param>
-    public static bool GiveSchool(Fighter fighter, string key, int level = 1)
+    /// <param name="level">The stage, 1 to the school's MaxLevel.</param>
+    /// <param name="enhanced">Give it enhanced, as an enhanced upgrade card does.</param>
+    public static bool GiveSchool(Fighter fighter, string key, int level = 1, bool enhanced = false)
     {
         var s = GetSchool(key) ?? throw new ArgumentException($"no school '{key}'", nameof(key));
         if (!Active) { ApiLog.WarnOnce(null, "content:inactive:give", "custom content is off in this game; school not given"); return false; }
         Freeze();
         fighter ??= Gameplay.Players.LocalFighter;
         if (fighter is null || SkillManager.instance == null) return false;
-        SkillManager.instance.GiveSkillToFighter(s.Type, fighter, Math.Clamp(level, 1, s.MaxLevel));
+        SkillManager.instance.GiveSkillToFighter(s.Type, fighter, Math.Clamp(level, 1, s.MaxLevel) + (enhanced ? 5 : 0));
         return true;
     }
 
@@ -172,15 +170,15 @@ public static class ModContent
         return true;
     }
 
-    /// <summary>The level a fighter has a custom skill at, or 0.</summary>
+    /// <summary>The level a fighter has a custom skill or school at, or 0.</summary>
     /// <param name="fighter">The fighter; null means the local player.</param>
     /// <param name="key">The skill's key.</param>
     public static int SkillLevel(Fighter fighter, string key)
     {
-        var s = GetSkill(key);
+        int id = GetSkill(key)?.Id ?? GetSchool(key)?.Id ?? 0;
         fighter ??= Gameplay.Players.LocalFighter;
-        if (s == null || fighter is null || s.Id == 0 || fighter.skills == null) return 0;
-        return fighter.skills.TryGetValue(s.Type, out var k) && k != null ? k.level : 0;
+        if (id == 0 || fighter is null || fighter.skills == null) return 0;
+        return fighter.skills.TryGetValue((SkillType)id, out var k) && k != null ? k.level : 0;
     }
 
     // ------------------------------------------------------------------ internals

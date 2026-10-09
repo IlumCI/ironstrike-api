@@ -105,7 +105,7 @@ internal static class SkillHost
         if (!contexts.TryGetValue(s.Pointer, out var c))
             contexts[s.Pointer] = c = new SkillContext { Skill = def, GameSkill = s };
         c.Fighter = s.owner;
-        c.Level = Math.Max(1, s.level);
+        c.Level = Math.Max(1, s.level) + (s.enhanced ? 5 : 0);   // the game keeps the stage and an enhanced flag
         return c;
     }
 
@@ -125,7 +125,7 @@ internal static class SkillHost
     {
         var d = ModContent.ById((int)s.skillType);
         if (d == null) return "";
-        try { return d.Describe?.Invoke(Math.Max(1, s.level)) ?? ""; }
+        try { return d.Describe?.Invoke(Math.Max(1, s.level) + (s.enhanced ? 5 : 0)) ?? ""; }
         catch (Exception e) { Fail(d, d.Describe, "Describe", e); return ""; }
     }
 

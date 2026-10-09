@@ -47,6 +47,7 @@
     <Reference Include="$(InteropDir)/UnityEngine.UI.dll" Private="false" />
     <Reference Include="$(InteropDir)/UnityEngine.ScreenCaptureModule.dll" Private="false" />
     <Reference Include="$(InteropDir)/UnityEngine.ImageConversionModule.dll" Private="false" />
+    <Reference Include="$(InteropDir)/UnityEngine.ParticleSystemModule.dll" Private="false" />
     <Reference Include="$(InteropDir)/Il2Cppmscorlib.dll" Private="false" />
     <Reference Include="$(InteropDir)/Fusion.Runtime.dll" Private="false" />
     <Reference Include="$(InteropDir)/Fusion.Common.dll" Private="false" />

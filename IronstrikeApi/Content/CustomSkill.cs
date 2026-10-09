@@ -56,6 +56,10 @@ public sealed class CustomSkill
     /// </summary>
     public float OfferWeight { get; set; } = 1f;
 
+    /// <summary>Whether the upgrade screen may offer it enhanced (see <see cref="SkillContext.Enhanced"/>).
+    /// Off by default: say what enhanced does in <see cref="Describe"/> (levels 6 to 10) before turning it on.</summary>
+    public bool AllowsEnhanced { get; set; }
+
     /// <summary>Skills that cannot be held together with this one (keys of custom skills).</summary>
     public List<string> ExclusiveWith { get; } = new();
 
@@ -185,6 +189,12 @@ public sealed class SkillContext
     /// <summary>The skill's level, 1 to 5 (6 to 10 when enhanced).</summary>
     public int Level { get; internal set; }
 
+    /// <summary>The stage, 1 to 5, whether or not it is enhanced.</summary>
+    public int Stage => Level > 5 ? Level - 5 : Level;
+
+    /// <summary>True when the skill was taken enhanced.</summary>
+    public bool Enhanced => Level > 5;
+
     /// <summary>True if the fighter is this machine's player.</summary>
     public bool IsLocal => Gameplay.Players.IsLocal(Fighter);
 
@@ -197,6 +207,6 @@ public sealed class SkillContext
     public float PerLevel(params float[] values)
     {
         if (values == null || values.Length == 0) return 0f;
-        return values[Math.Clamp(Level, 1, values.Length) - 1];
+        return values[Math.Clamp(Stage, 1, values.Length) - 1];
     }
 }

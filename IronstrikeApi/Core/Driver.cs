@@ -57,7 +57,7 @@ internal static class Driver
         Step(() => Content.ContentTest.Tick(now), "content test");
         Step(() => Content.SpellProbe.Tick(now), "spell probe");
         Step(Content.RuneTree.Tick, "rune grid");
-        Step(Content.SpellEffects.Fade.Tick, "spell effects");
+        Step(Content.Fx.Tick, "spell effects");
         Step(Content.SpellEffects.Later.Tick, "delayed spell actions");
     }
 

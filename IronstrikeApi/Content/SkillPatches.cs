@@ -73,7 +73,7 @@ internal static class SkillPatches
             s.skillName = d.Name;
             s.level = 1;
             s.hidden = false;
-            s.allowsEnhanced = false;
+            s.allowsEnhanced = d.AllowsEnhanced;
             s.skillCategory = d.Category;
             s.skillClass = d.Class ?? SkillClass.Fighter;
             s.mutualExclusions = new Il2CppSystem.Collections.Generic.List<SkillType>();
@@ -118,10 +118,10 @@ internal static class SkillPatches
     static void FancyName(Skill __instance, ref string __result)
     {
         var n = CustomName(__instance);
-        if (n != null) __result = __instance.TryCast<Spell>() is not null ? n : n + " " + Roman(__instance.level);
+        if (n != null) __result = __instance.TryCast<Spell>() is not null ? n : n + " " + Roman(__instance.level) + (__instance.enhanced || __instance.level > 5 ? " - Enhanced" : "");
     }
 
-    internal static string Roman(int level) => level switch
+    internal static string Roman(int level) => (level > 5 ? level - 5 : level) switch
     {
         <= 1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V",
         _ => "V+",
@@ -148,11 +148,9 @@ internal static class SkillPatches
         {
             var game = new List<int>();
             var owned = OwnedLevels(fighter);
-            // A game school whose runes an owned custom school uses is never offered.
-            var blocked = new HashSet<int>(ModContent.Schools.Where(sc => sc.Id != 0 && owned.ContainsKey(sc.Id)).Select(sc => (int)sc.Runes));
             var original = new List<int>();
             for (int i = 0; i < list.Count; i++) original.Add((int)list[i]);
-            game.AddRange(original.Where(id => !blocked.Contains(id)));
+            game.AddRange(original);
             var candidates = ModContent.Skills.Where(d => Eligible(d, fighter, category, owned)).Select(d => (d.Id, d.OfferWeight))
                 .Concat(ModContent.Schools.Where(d => EligibleSchool(d, fighter, category, owned)).Select(d => (d.Id, d.OfferWeight))).ToList();
             var offers = OffersBy(game, candidates, rng);
@@ -175,7 +173,7 @@ internal static class SkillPatches
     {
         if (d.Id == 0 || d.OfferWeight <= 0 || d.Category != category) return false;
         if (d.Class.HasValue && d.Class.Value != f.fighterClass) return false;
-        if (owned.TryGetValue(d.Id, out int lvl) && lvl >= d.MaxLevel) return false;
+        if (owned.TryGetValue(d.Id, out int lvl) && (lvl > 5 ? lvl - 5 : lvl) >= d.MaxLevel) return false;
         foreach (var other in d.ExclusiveWith)
         {
             var o = ModContent.GetSkill(other);
@@ -189,8 +187,7 @@ internal static class SkillPatches
     internal static bool EligibleSchool(CustomSchool d, Fighter f, SkillCategory category, Dictionary<int, int> owned)
     {
         if (d.Id == 0 || d.OfferWeight <= 0 || d.Category != category || f.fighterClass != SkillClass.Caster) return false;
-        if (owned.TryGetValue(d.Id, out int lvl) && lvl >= d.MaxLevel) return false;
-        return !owned.ContainsKey((int)d.Runes);
+        return !(owned.TryGetValue(d.Id, out int lvl) && (lvl > 5 ? lvl - 5 : lvl) >= d.MaxLevel);
     }
 
     internal static List<int> Offers(List<int> game, List<CustomSkill> candidates, System.Random random)

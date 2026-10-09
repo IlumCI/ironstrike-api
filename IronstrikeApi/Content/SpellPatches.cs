@@ -11,7 +11,7 @@ namespace IronstrikeApi.Content;
 //  - A magic school is an UnlockSpellsSkill whose GameObject holds its two spells as children
 //    (spell1, spell2). Fighter.GetSpell(type) takes skills[spell.skillType] and returns whichever of
 //    the two matches; the rune grid unlocks a spell when the fighter has spell.skillType.
-//  - So a custom school is a clone of the school whose runes it borrows, with its two spell children
+//  - So a custom school is a clone of a game school (its preferred rune branch's), with its two spell children
 //    replaced by ApiSpell objects. It goes into SkillDatabase's dictionary, the spells into
 //    SpellDatabase's (SpellManager.GetSpell reads that one).
 //  - Templates live under one inactive, never-unloaded holder, so cloning them runs no Awake.
@@ -163,14 +163,10 @@ internal static class SpellPatches
             us.skillClass = SkillClass.Caster;
             us.level = 1;
             us.hidden = false;
-            us.allowsEnhanced = false;
+            us.allowsEnhanced = d.AllowsEnhanced;
             var icon = d.Icon?.Sprite;
             if (icon != null) { us.skillSprite = icon; us.skillIcon = icon; }
             us.mutualExclusions = new Il2CppSystem.Collections.Generic.List<SkillType>();
-            us.mutualExclusions.Add(d.Runes);
-            // And the other way round, so the game never offers the school whose runes are taken.
-            game.mutualExclusions ??= new Il2CppSystem.Collections.Generic.List<SkillType>();
-            if (!game.mutualExclusions.Contains(d.Type)) game.mutualExclusions.Add(d.Type);
             schoolTemplates[d.Id] = us;
             return us;
         }
@@ -203,7 +199,7 @@ internal static class SpellPatches
         if (d == null) return;
         try
         {
-            __result = d.Describe != null ? d.Describe(Math.Max(1, __instance.level))
+            __result = d.Describe != null ? d.Describe(Math.Max(1, __instance.level) + (__instance.enhanced ? 5 : 0))
                 : $"Teaches two spells: {ModContent.GetSpell(d.Spells[0])?.Name} and {ModContent.GetSpell(d.Spells[1])?.Name}.";
         }
         catch (Exception e) { Safe.Blame(d.Describe, $"school {d.Key} Describe", e); }

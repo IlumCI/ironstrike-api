@@ -120,7 +120,7 @@ public class OfferTests
     }
 
     [Theory]
-    [InlineData(1, "I")] [InlineData(3, "III")] [InlineData(5, "V")] [InlineData(0, "I")] [InlineData(7, "V+")]
+    [InlineData(1, "I")] [InlineData(3, "III")] [InlineData(5, "V")] [InlineData(0, "I")] [InlineData(7, "II")] [InlineData(10, "V")]
     public void Levels_read_like_the_game(int level, string numeral) => Assert.Equal(numeral, SkillPatches.Roman(level));
 }
 
@@ -228,10 +228,10 @@ public class SpellRegistryTests : IDisposable
         ModContent.School("t.e", s => { s.Spells.Add("t.one"); s.Spells.Add("t.two"); });
         ModContent.Spell("t.three", s => { });
         ModContent.Spell("t.four", s => { });
-        // Spells already taught, and runes already taken (both default to Storm).
-        Assert.Throws<ArgumentException>(() => ModContent.School("t.f", s => { s.Spells.Add("t.one"); s.Spells.Add("t.three"); s.Runes = SkillType.FireMagic; }));
-        Assert.Throws<ArgumentException>(() => ModContent.School("t.g", s => { s.Spells.Add("t.three"); s.Spells.Add("t.four"); }));
-        ModContent.School("t.h", s => { s.Spells.Add("t.three"); s.Spells.Add("t.four"); s.Runes = SkillType.FireMagic; });
+        // A spell already taught by another school.
+        Assert.Throws<ArgumentException>(() => ModContent.School("t.f", s => { s.Spells.Add("t.one"); s.Spells.Add("t.three"); }));
+        // Two schools may prefer the same rune branch: branches are assigned per player while playing.
+        ModContent.School("t.h", s => { s.Spells.Add("t.three"); s.Spells.Add("t.four"); });
     }
 
     [Fact]
@@ -273,5 +273,8 @@ public class SpellRegistryTests : IDisposable
         Assert.Equal(8f, CustomSpell.At(v, 2));
         Assert.Equal(8f, CustomSpell.At(v, 5));
         Assert.Equal(10f, CustomSpell.At(v, 0));
+        Assert.Equal(10f, CustomSpell.At(v, 6));                                  // enhanced stage I: its plain value
+        Assert.Equal(7f, CustomSpell.At(new[] { 10f, 9f, 8f, 8f, 8f, 7f }, 6));    // unless given
+        Assert.Equal(8f, CustomSpell.At(v, 7));
     }
 }

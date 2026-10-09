@@ -58,7 +58,8 @@ public sealed class CustomSpell
     /// <summary>The game spell whose indicators, preview and projectile or area effect it borrows.</summary>
     public SpellType LooksLike { get; set; } = SpellType.Fireball;
 
-    /// <summary>Seconds between casts, per level (the last value repeats).</summary>
+    /// <summary>Seconds between casts, per level (the last value repeats). Entries 6 to 10, if given, are the
+    /// enhanced stages; otherwise an enhanced stage uses its plain value.</summary>
     public float[] Cooldown { get; set; } = { 10f };
 
     /// <summary>Mana per cast, per level (the casting bar holds 100).</summary>
@@ -104,7 +105,13 @@ public sealed class CustomSpell
         return true;
     }
 
-    internal static float At(float[] v, int level) => v[Math.Clamp(level, 1, v.Length) - 1];
+    // Levels 1-5 are the stages; 6-10 the same stages enhanced. An array that stops before an enhanced
+    // level gives that stage's plain value.
+    internal static float At(float[] v, int level)
+    {
+        if (level > 5 && v.Length < level) level -= 5;
+        return v[Math.Clamp(level, 1, v.Length) - 1];
+    }
 }
 
 /// <summary>
@@ -113,11 +120,13 @@ public sealed class CustomSpell
 /// Register one with <see cref="ModContent.School"/>.
 /// </summary>
 /// <remarks>
-/// <para><b>Runes.</b> The rune grid has a fixed set of shapes, one branch per game school. A custom
-/// school draws its two spells with the shapes of one game school (<see cref="Runes"/>): its first
-/// spell with that school's first spell's shape (three strokes), its second with the second's (four).
-/// So that the shapes never clash, a player cannot hold a custom school and the game school whose
-/// runes it borrows; the upgrade screen offers only one of them.</para>
+/// <para><b>Runes.</b> The rune grid has a fixed set of hand-made shapes, one branch per game school,
+/// and only paths whose spells the player knows can be drawn. A custom school is drawn on the branch of
+/// a game school <i>the player does not have</i>: its first spell with that school's first shape
+/// (three strokes), its second with the second (four), and its own names and icons on the grid. The
+/// branch is picked per player while playing, preferring <see cref="Runes"/>; if the player later
+/// takes that game school, the custom school moves to another free branch. Nothing is replaced and
+/// any schools can be held together.</para>
 /// </remarks>
 public sealed class CustomSchool
 {
@@ -144,14 +153,19 @@ public sealed class CustomSchool
     /// <summary>The upgrade-screen category: Evocation (attack schools) or Enchantment (buffs and curses).</summary>
     public SkillCategory Category { get; set; } = SkillCategory.Evocation;
 
-    /// <summary>The game school whose rune shapes it uses, e.g. <c>SkillType.StormMagic</c>.</summary>
+    /// <summary>The game school whose rune branch it prefers to be drawn on, e.g. <c>SkillType.StormMagic</c>.
+    /// Used when the player does not have that school; otherwise another free branch is used.</summary>
     public SkillType Runes { get; set; } = SkillType.StormMagic;
 
     /// <summary>How often it is offered compared with a game skill (1 = as often; 0 = never).</summary>
     public float OfferWeight { get; set; } = 1f;
 
-    /// <summary>The highest level; 1 to 5.</summary>
+    /// <summary>The highest stage; 1 to 5 (the game's schools have 3).</summary>
     public int MaxLevel { get; set; } = 5;
+
+    /// <summary>Whether the upgrade screen may offer it enhanced, as it does the game's skills
+    /// ("Lightning Magic II - Enhanced"). Its spells then see <see cref="SpellContext.Enhanced"/>.</summary>
+    public bool AllowsEnhanced { get; set; } = true;
 
     /// <summary>The keys of its two spells, first (three-stroke) then second (four-stroke).</summary>
     public List<string> Spells { get; } = new();
@@ -188,8 +202,14 @@ public sealed class SpellContext
     /// <summary>Who knows the spell.</summary>
     public Fighter Caster { get; internal set; }
 
-    /// <summary>The spell's level: its school's level, 1 to 5.</summary>
+    /// <summary>The spell's level: its school's, 1 to 5, or 6 to 10 when enhanced.</summary>
     public int Level { get; internal set; }
+
+    /// <summary>The stage, 1 to 5, whether or not it is enhanced.</summary>
+    public int Stage => Level > 5 ? Level - 5 : Level;
+
+    /// <summary>True when the school was taken enhanced (an enhanced card on the upgrade screen).</summary>
+    public bool Enhanced => Level > 5;
 
     /// <summary>True if the caster is this machine's player.</summary>
     public bool IsLocal => Gameplay.Players.IsLocal(Caster);
@@ -197,10 +217,10 @@ public sealed class SpellContext
     /// <summary>Your own state for this spell on this caster.</summary>
     public Dictionary<string, object> State { get; } = new();
 
-    /// <summary>Picks the value for the current level (levels past the end use the last value).</summary>
-    /// <param name="values">One value per level.</param>
+    /// <summary>Picks the value for the current stage (stages past the end use the last value).</summary>
+    /// <param name="values">One value per stage.</param>
     public float PerLevel(params float[] values)
-        => values == null || values.Length == 0 ? 0f : values[Math.Clamp(Level, 1, values.Length) - 1];
+        => values == null || values.Length == 0 ? 0f : values[Math.Clamp(Stage, 1, values.Length) - 1];
 
     internal Weapon Weapon;
 

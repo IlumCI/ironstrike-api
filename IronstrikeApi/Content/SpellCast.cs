@@ -94,6 +94,21 @@ public sealed class SpellCast
     /// <param name="radius">Metres.</param>
     public List<Fighter> AlliesNear(Vector3 center, float radius) => SpellEffects.Near(Caster, center, radius, enemies: false);
 
+    /// <summary>
+    /// Lifts a fighter into the air for a time and lets it drop. Bots fly the way the game's flying
+    /// bosses do (their own flight, raised to <paramref name="height"/>); players get the Levitation
+    /// status. Runs everywhere.
+    /// </summary>
+    /// <param name="target">Who is lifted.</param>
+    /// <param name="height">Metres above the ground.</param>
+    /// <param name="seconds">How long it hangs there.</param>
+    public void Lift(Fighter target, float height, float seconds)
+    {
+        if (target is null || target.dead) return;
+        if (!SpellEffects.IsBot(target)) { Status(target, StatusType.Levitation, seconds); return; }
+        SpellEffects.LiftBot(target, height, seconds);
+    }
+
     /// <summary>Fallen allied players within a radius (for spells that bring them back), nearest first.</summary>
     /// <param name="center">The point.</param>
     /// <param name="radius">Metres.</param>
@@ -141,43 +156,6 @@ public sealed class SpellCast
         => Game != null && Game.SpawnShot(Wand, origin, direction);
 }
 
-/// <summary>Short-lived visual effects for spells. Local to this machine; call them from synced code.</summary>
-public static class SpellFx
-{
-    /// <summary>A jagged lightning bolt between two points that fades out.</summary>
-    /// <param name="from">Start.</param>
-    /// <param name="to">End.</param>
-    /// <param name="color">Colour.</param>
-    /// <param name="width">Width in metres.</param>
-    /// <param name="seconds">How long it shows.</param>
-    public static void Bolt(Vector3 from, Vector3 to, Color color, float width = 0.08f, float seconds = 0.35f)
-        => SpellEffects.Line(from, to, color, width, seconds, jag: 0.35f);
-
-    /// <summary>A straight beam between two points that fades out.</summary>
-    /// <param name="from">Start.</param>
-    /// <param name="to">End.</param>
-    /// <param name="color">Colour.</param>
-    /// <param name="width">Width in metres.</param>
-    /// <param name="seconds">How long it shows.</param>
-    public static void Beam(Vector3 from, Vector3 to, Color color, float width = 0.5f, float seconds = 0.6f)
-        => SpellEffects.Line(from, to, color, width, seconds, jag: 0f);
-
-    /// <summary>A ring on the ground that fades out (an area's edge).</summary>
-    /// <param name="center">Centre.</param>
-    /// <param name="radius">Metres.</param>
-    /// <param name="color">Colour.</param>
-    /// <param name="seconds">How long it shows.</param>
-    public static void Ring(Vector3 center, float radius, Color color, float seconds = 0.8f)
-        => SpellEffects.Ring(center, radius, color, seconds);
-
-    /// <summary>A flash of coloured light lighting up the scene, like the game's lightning.</summary>
-    /// <param name="at">Where.</param>
-    /// <param name="color">Colour.</param>
-    /// <param name="intensity">Brightness (the game uses about 1 to 4).</param>
-    /// <param name="seconds">Fade time.</param>
-    public static void Flash(Vector3 at, Color color, float intensity = 2f, float seconds = 0.4f)
-        => SpellEffects.Flash(at, color, intensity, seconds);
-}
 
 // The plumbing behind SpellCast and SpellFx.
 internal static class SpellEffects
@@ -301,112 +279,35 @@ internal static class SpellEffects
         internal static void Clear() => jobs.Clear();
     }
 
-    // ------------------------------------------------------------------ visuals
-
-    static Material lineMat;
-
-    static Material LineMaterial()
-    {
-        if (lineMat != null) return lineMat;
-        foreach (var name in new[] { "Sprites/Default", "Legacy Shaders/Particles/Additive", "Particles/Standard Unlit", "Unlit/Color" })
-        {
-            var sh = Shader.Find(name);
-            if (sh != null) { lineMat = new Material(sh) { hideFlags = HideFlags.HideAndDontSave }; Diag.Info($"spell effects: lines drawn with {name}"); return lineMat; }
-        }
-        foreach (var tr in UnityEngine.Object.FindObjectsOfType<TrailRenderer>())
-            if (tr.sharedMaterial != null) { lineMat = new Material(tr.sharedMaterial) { hideFlags = HideFlags.HideAndDontSave }; Diag.Info($"spell effects: lines drawn with {tr.sharedMaterial.shader?.name}"); return lineMat; }
-        ApiLog.WarnOnce(null, "content:fx", "spell effects: no shader for lines; SpellFx lines are off");
-        return null;
-    }
-
-    internal static void Line(Vector3 from, Vector3 to, Color color, float width, float seconds, float jag)
-    {
-        var mat = LineMaterial();
-        if (mat == null) return;
-        var go = new GameObject("ApiSpellFx");
-        var lr = go.AddComponent<LineRenderer>();
-        lr.sharedMaterial = mat;
-        lr.startColor = lr.endColor = color;
-        lr.startWidth = width;
-        lr.endWidth = width * (jag > 0 ? 0.5f : 1f);
-        lr.useWorldSpace = true;
-        int n = jag > 0 ? Mathf.Clamp((int)(Vector3.Distance(from, to) / 0.8f), 4, 24) : 2;
-        lr.positionCount = n;
-        var rnd = new System.Random(unchecked((int)(from.x * 1000 + to.z * 7)));
-        var side = Vector3.Cross(to - from, Vector3.up).normalized;
-        for (int i = 0; i < n; i++)
-        {
-            float t = i / (float)(n - 1);
-            var p = Vector3.Lerp(from, to, t);
-            if (jag > 0 && i > 0 && i < n - 1)
-                p += side * (float)(rnd.NextDouble() - 0.5) * jag * 2f + Vector3.up * (float)(rnd.NextDouble() - 0.5) * jag;
-            lr.SetPosition(i, p);
-        }
-        Fade.Start(go, lr, null, color, seconds);
-    }
-
-    internal static void Ring(Vector3 center, float radius, Color color, float seconds)
-    {
-        var mat = LineMaterial();
-        if (mat == null) return;
-        var go = new GameObject("ApiSpellFxRing");
-        var lr = go.AddComponent<LineRenderer>();
-        lr.sharedMaterial = mat;
-        lr.startColor = lr.endColor = color;
-        lr.startWidth = lr.endWidth = 0.12f;
-        lr.loop = true;
-        lr.useWorldSpace = true;
-        const int n = 48;
-        lr.positionCount = n;
-        for (int i = 0; i < n; i++)
-        {
-            float a = i * Mathf.PI * 2f / n;
-            lr.SetPosition(i, center + new Vector3(Mathf.Cos(a) * radius, 0.1f, Mathf.Sin(a) * radius));
-        }
-        Fade.Start(go, lr, null, color, seconds);
-    }
-
     static GlobalLighting lighting;
 
-    internal static void Flash(Vector3 at, Color color, float intensity, float seconds)
+    // The game's own scene-wide flash (lightning spells use it).
+    internal static void SkyFlash(Vector3 at, Color color, float intensity, float seconds)
     {
         if (lighting == null) lighting = UnityEngine.Object.FindObjectOfType<GlobalLighting>();
         try { lighting?.FlashCustomLight(at, intensity, seconds, color, 1f); } catch (Exception) { }
     }
 
-    // Fades effects out from the API's per-frame tick (no MonoBehaviour needed).
-    internal static class Fade
+    // The game's own bot flight (NetworkBotFighterDriver.MakeBotFly, what RPC_BotFlight runs on every
+    // machine): it tweens the bot from AIBot.flyGroundHeight up to flyAirHeight, hovers flyHoverTime,
+    // and comes back down. Those settings are the bot's own; they are put back afterwards.
+    internal static void LiftBot(Fighter f, float height, float seconds)
     {
-        sealed class Item { public GameObject Go; public LineRenderer Line; public Color Color; public float Start, Length; }
-        static readonly List<Item> items = new();
-
-        internal static void Start(GameObject go, LineRenderer lr, object _, Color c, float seconds)
-            => items.Add(new Item { Go = go, Line = lr, Color = c, Start = Time.time, Length = Mathf.Max(0.05f, seconds) });
-
-        internal static void Tick()
+        var drv = f.nfd?.TryCast<NetworkBotFighterDriver>();
+        var bot = drv?.bot;
+        if (drv is null || bot is null) return;
+        float air = bot.flyAirHeight, hover = bot.flyHoverTime;
+        try
         {
-            if (items.Count == 0) return;
-            float now = Time.time;
-            for (int i = items.Count - 1; i >= 0; i--)
-            {
-                var it = items[i];
-                float t = (now - it.Start) / it.Length;
-                if (it.Go == null || t >= 1f)
-                {
-                    if (it.Go != null) UnityEngine.Object.Destroy(it.Go);
-                    items.RemoveAt(i);
-                    continue;
-                }
-                var c = it.Color;
-                c.a *= 1f - t;
-                it.Line.startColor = it.Line.endColor = c;
-            }
+            bot.flyAirHeight = bot.flyGroundHeight + height;
+            bot.flyHoverTime = seconds;
+            drv.MakeBotFly();
         }
-
-        internal static void Clear()
+        catch (Exception e) { ApiLog.WarnOnce(null, "content:lift", $"spell effects: could not lift a bot ({e.Message})"); }
+        finally
         {
-            foreach (var it in items) if (it.Go != null) UnityEngine.Object.Destroy(it.Go);
-            items.Clear();
+            bot.flyAirHeight = air;
+            bot.flyHoverTime = hover;
         }
     }
 }

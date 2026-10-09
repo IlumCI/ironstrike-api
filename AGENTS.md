@@ -132,8 +132,8 @@ Main-menu pills are copies of the HOST pill:
   5. Leaves and logs event counts (`self-test [...]` lines).
 - **`ContentTest`:** registers a test skill per upgrade category, gives one, screenshots the real
   upgrade screen (`BepInEx/debug-shots`), runs a fight and logs which hooks fired.
-- **`SpellProbe`:** registers a test school (Fire runes), checks templates, attributes and the rune
-  grid copy, casts through the wand, then fires every registered spell's synced event at a bot and
+- **`SpellProbe`:** registers a test school, checks templates, attributes, the rune branch
+  assignment (every school on its own free branch, moving when the player takes its game school), casts through the wand, then fires every registered spell's synced event at a bot and
   logs health, statuses and failures. Writes `BepInEx/spell-probe.txt`.
 - **`DumpIcons`:** writes every game skill and spell icon to `debug-shots/icons`.
 - **`LogEvents`:** logs every event, with counts and enums only.
@@ -259,8 +259,11 @@ Facts learned:
 - **Custom content, verified in game (flat):** skills on the real upgrade screen with library icons;
   hooks in a fight; a school's spells through `GetSpell`, with per-level cooldown/mana/range; a cast
   through the wand; every Arcana spell's synced event against a bot. **Not verified:** drawing a
-  custom school's runes in VR (needs a headset), Flak Shot and Plague Cloud hitting (the wand sits
-  on the floor flat), two players with content.
+  custom school's runes in VR (needs a headset), Plague Cloud hitting (the wand sits on the floor
+  flat), two players with content.
+- **Schools are additions (user's requirement).** No replacing, no mutual exclusion with game
+  schools. `RuneTree` gives each owned custom school a copy of a branch of a game school the player
+  does not own. Players see "Fire Magic"-style names; "Ars Ignis" is only the internal `skillName`.
 - **Unsolved: some windows opened in front of the camera do not render, flat under Proton.**
   - **What fails:** text-only pages and tables, opened with `Window.Open()` and no anchor, at any
     time in the haven.

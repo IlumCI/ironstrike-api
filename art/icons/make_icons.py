@@ -721,6 +721,15 @@ def _(k):
     k.cut(hole)
 
 
+@icon("spell_thunderstorm")
+def _(k):
+    cloud(k, C, 300, 820)
+    for x0, x1, y1 in ((C - 250, C - 300, 900), (C + 20, C - 40, 970), (C + 280, C + 230, 880)):
+        gap = k.layer()
+        gap.poly(bolt_pts(x0 + 20, 330, x1, y1 + 20, 74))
+        k.cut(gap)
+        k.poly(bolt_pts(x0 + 20, 380, x1, y1, 50))
+
 @icon("spell_chain_lightning")
 def _(k):
     nodes = [(170, 330), (512, 700), (860, 300)]

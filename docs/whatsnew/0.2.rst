@@ -21,10 +21,17 @@ Summary -- release highlights
   :cs:type:`~IronstrikeApi.Content.SpellCast` gives them damage, healing, status effects, area
   queries, delayed actions, the game's projectiles and area effects, and simple effects of their own
   (:cs:type:`~IronstrikeApi.Content.SpellFx`).
+* **Spell effects.** :cs:type:`~IronstrikeApi.Content.SpellFx` draws with the game's own lightning,
+  glows, sparks, smoke and flares: forked bolts, sustained force-lightning channels, sky beams,
+  explosions, shockwaves, telegraphs, storm clouds, pillars, tethers, auras that cling to fighters,
+  and the game's own effect prefabs. ``cast.Lift`` hoists enemies with the game's own bot flight.
+* **Stages and enhanced.** Schools can stop at three stages like the game's, and are offered
+  enhanced ("Lightning Magic II - Enhanced"); hooks see ``Stage`` and ``Enhanced``.
 * **Icons.** :cs:type:`~IronstrikeApi.Content.Icons` loads a PNG, an embedded resource or one of the
-  game's icons, and ships a library of 46 icons drawn in the game's style.
-* **Arcana**, a new example mod: five schools and ten spells (Chain Lightning, Orbital Laser, Raise
-  Dead, Life Drain, Telekinesis, Kinetic Ward, Flak Shot, Air Strike, Plague Cloud, Pestilence).
+  game's icons, and ships a library of 47 icons drawn in the game's style.
+* **Arcana**, a new example mod: five new schools. Lightning Magic (Chain Lightning, Thunderstorm),
+  Sky Magic (Air Strike, Orbital Laser), Death Magic (Raise Dead, Life Drain), Mind Magic
+  (Telekinesis, Kinetic Ward) and Plague Magic (Plague Cloud, Pestilence).
 * :cs:type:`~IronstrikeApi.Gameplay.Body`: where a fighter really is (feet, centre, head).
 
 Compatibility
@@ -39,8 +46,9 @@ Known limitations
 =================
 
 * Custom content is off in Private Matches and on servers where players' content differs.
-* A custom school borrows the rune shapes of one game school and replaces it for that player; two
-  mods cannot borrow the same school.
+* The rune grid's shapes are the game's: a custom school is drawn on the branch of a game school the
+  player does not have, so its shapes can differ between runs. A player who holds all sixteen game
+  schools has no free branch left for it.
 * Casting from the rune grid was verified piece by piece without a headset (templates, unlocking,
   the cast through the wand, every spell's synced event against a bot). Please report how drawing
   the runes feels in VR.

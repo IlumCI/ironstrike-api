@@ -113,9 +113,24 @@ internal static class SpellHost
         if (!contexts.TryGetValue(s.Pointer, out var c))
             contexts[s.Pointer] = c = new SpellContext { Spell = d, GameSpell = s };
         c.Caster = s.owner;
-        c.Level = Math.Max(1, s.level);
+        c.Level = Level(s, d);
         c.Weapon = s.owner?.MainWeapon is not null && s.owner.MainWeapon.isCasterWeapon ? s.owner.MainWeapon : s.owner?.OffWeapon;
         return c;
+    }
+
+    // A spell's level is its school's: the stage, plus 5 when the school was taken enhanced (the game
+    // stores an enhanced skill as its stage and a flag).
+    internal static int Level(Spell s, CustomSpell d)
+    {
+        int lvl = Math.Max(1, s.level);
+        bool enh = s.enhanced;
+        var f = s.owner;
+        if (d?.School != null && f?.skills != null && f.skills.TryGetValue(d.School.Type, out var school) && school != null)
+        {
+            lvl = Math.Max(1, school.level);
+            enh = school.enhanced;
+        }
+        return lvl + (enh ? 5 : 0);
     }
 
     static bool Broken(CustomSpell d) => failures.TryGetValue(d.Key, out int n) && n >= MaxFailures;
@@ -168,7 +183,7 @@ internal static class SpellHost
     {
         var d = Def(s);
         if (d == null) return "";
-        try { return d.Describe?.Invoke(Math.Max(1, s.level)) ?? ""; }
+        try { return d.Describe?.Invoke(Level(s, d)) ?? ""; }
         catch (Exception e) { Fail(d, d.Describe, "Describe", e); return ""; }
     }
 

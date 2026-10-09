@@ -12,8 +12,8 @@ Everything here is registered once, in your plugin's ``Load()``, and works in so
 modded servers. See :ref:`content-rules` before you ship.
 
 The `Arcana <https://github.com/IlumCI/ironstrike-api/tree/main/examples/Arcana>`_ example mod
-adds five schools and ten spells (chain lightning, an orbital laser, necromancy, telekinesis, air
-strikes, plagues...) in about 400 lines. Read it next to this page.
+adds five schools and ten spells (chain lightning, a thunderstorm, air strikes, an orbital laser,
+raising the dead, lifesteal, telekinesis, plagues...) in about 400 lines. Read it next to this page.
 
 A new skill
 ===========
@@ -67,7 +67,7 @@ compete with the game's for the same slots. A skill is not offered past its
 A magic school and its spells
 =============================
 
-In IRONSTRIKE a caster learns spells from **schools** (Ars Ignis teaches Fireball and Balefire). A
+In IRONSTRIKE a caster learns spells from **schools** (Fire Magic teaches Fireball and Balefire). A
 custom school is the same: an upgrade that teaches two spells. Register the spells first, then the
 school::
 
@@ -87,50 +87,55 @@ school::
            cast.Damage(cast.Target, cast.Amount);
        };
    });
-   ModContent.Spell("mymod.orbital_laser", s => { /* ... */ });
+   ModContent.Spell("mymod.thunderstorm", s => { /* ... */ });
 
    ModContent.School("mymod.tempest", s =>
    {
-       s.Name = "Ars Tempestas";
+       s.Name = "Lightning Magic";                      // the game names schools "Fire Magic", "Storm Magic"...
        s.Icon = Icons.Library("school_tempest");
        s.Category = SkillCategory.Evocation;            // or Enchantment
-       s.Runes = SkillType.StormMagic;                   // whose rune shapes it borrows
-       s.Spells.Add("mymod.chain_lightning");            // drawn like Static Field (3 strokes)
-       s.Spells.Add("mymod.orbital_laser");              // drawn like Lightning Bolt (4 strokes)
+       s.Runes = SkillType.StormMagic;                   // the rune branch it prefers (see below)
+       s.Spells.Add("mymod.chain_lightning");            // first: a minor spell (3 strokes)
+       s.Spells.Add("mymod.thunderstorm");               // second: a major spell (4 strokes)
    });
 
 Runes
 -----
 
-The rune grid has one branch of fixed shapes per game school. A custom school copies the branch of
-the school named in :cs:prop:`~IronstrikeApi.Content.CustomSchool.Runes`: its first spell is drawn
-like that school's first spell, its second like its second. So the shapes never clash, a player
-cannot hold both schools: the upgrade screen offers one or the other, and two mods cannot borrow the
-same school's runes (registration fails with a clear message).
+Custom schools are **additions**: a player can hold any of them next to any of the game's schools.
 
-.. list-table:: Rune branches (first spell / second spell)
+The rune grid is made of hand-drawn shapes, one branch per game school, and a player can only draw a
+path that ends in a spell they know. A custom school is drawn on the branch of a game school **the
+player does not have**: its first spell with that branch's first shape, its second with the second,
+with your names and icons on the grid. The branch is chosen per player while playing, preferring
+:cs:prop:`~IronstrikeApi.Content.CustomSchool.Runes`; if the player later takes the game school
+behind it, the custom school moves to another free branch (the log says which). So the shapes of a
+custom spell can differ between runs, but they are always the game's own, always drawable, and the
+grid always labels them.
+
+.. list-table:: Rune branches (first shape / second shape)
    :header-rows: 1
 
    * - ``Runes``
-     - School
+     - Game school
      - Shapes of
    * - ``EarthMagic``
-     - Ars Terra
+     - Earth Magic
      - Cobbleshot / Cometfall
    * - ``StormMagic``
-     - Ars Fulmen
+     - Storm Magic
      - Static Field / Lightning Bolt
    * - ``FireMagic``
-     - Ars Ignis
+     - Fire Magic
      - Fireball / Balefire
    * - ``IceMagic``
-     - Ars Glacies
+     - Ice Magic
      - Icicles / Frost Nova
    * - ``LightMagic``
-     - Ars Lux
+     - Light Magic
      - Moonbeam / Solar Flare
    * - ``AlchemicalMagic``
-     - Ars Alchemia
+     - Alchemical Magic
      - Acid Spray / Poison Sting
    * - ``ForestMagic``
      - Forest Magic
@@ -255,7 +260,7 @@ The icon library
 ``school_mind``, ``school_war``, ``school_plague``; ``spell_blood_lance``, ``spell_hemorrhage``,
 ``spell_void_rift``, ``spell_singularity``, ``spell_tidal_surge``, ``spell_whirlpool``,
 ``spell_overclock``, ``spell_bone_spear``, ``spell_rewind``, ``spell_savage_pounce``,
-``spell_shriek``, ``spell_chain_lightning``, ``spell_orbital_laser``, ``spell_raise_dead``,
+``spell_shriek``, ``spell_chain_lightning``, ``spell_thunderstorm``, ``spell_orbital_laser``, ``spell_raise_dead``,
 ``spell_life_drain``, ``spell_kinetic_ward``, ``spell_telekinesis``, ``spell_flak_shot``,
 ``spell_air_strike``, ``spell_plague_cloud``, ``spell_pestilence``; ``skill_bloodlust``,
 ``skill_second_wind``, ``skill_momentum``, ``skill_thorns``, ``skill_overcharge``,
@@ -293,8 +298,9 @@ For the curious, and for the next game update:
   template of each custom skill, school and spell in the game's own dictionaries
   (``SkillDatabase.GetSkillDict``, ``SpellDatabase.GetSpellDict``) under its id. From there the game
   copies them onto fighters as it does its own.
-* A school is a copy of the game school whose runes it borrows (an ``UnlockSpellsSkill``) with its
-  two spells swapped for the API's. The rune grid's branch for that school is copied the same way.
+* A school is a copy of a game school (an ``UnlockSpellsSkill``) with its two spells swapped for the
+  API's. On the rune grid, the branch of a game school the player does not have is copied and pointed
+  at the custom spells, for that player only.
 * The game asks a skill for its share of a stat through ~40 virtual methods; the API's subclass
   forwards each to your hooks, guarded.
 * Injected classes are marked for the garbage collector to scan: Il2CppInterop leaves that bit clear,
