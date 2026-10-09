@@ -155,6 +155,7 @@ internal static class SpellProbe
 
             case 32:
                 Log("branches: " + string.Join(", ", ModContent.Schools.Select(sc => $"{sc.Key}->{RuneTree.HostOf(sc.Key)?.ToString() ?? "none"}")));
+                if (System.IO.File.Exists(System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "spell-probe-grid"))) { step = 400; at = now + 1f; return; }
                 GridAB();
                 foreach (var sc in ModContent.Schools.Take(2)) Loadout.GiveSkill(sc.Runes, 1);
                 Log($"gave the player {string.Join(", ", ModContent.Schools.Take(2).Select(sc => sc.Runes))}");
@@ -289,6 +290,25 @@ internal static class SpellProbe
                 step = 11; at = now + 1.5f; return;
             }
 
+            // ---- the rune grid, drawn on the flat screen and photographed
+            case 400:
+                GridStart();
+                step = 401; at = now + 2f; return;
+            case 401: GridShot("1-grid"); step = 402; at = now + 1.5f; return;
+            case 402: GridStep("game corner", topCorner); step = 403; at = now + 1.5f; return;
+            case 403: GridShot("2-game-corner-open"); step = 404; at = now + 1.5f; return;
+            case 404: GridStep("game selector", gameSelector); step = 405; at = now + 1.5f; return;
+            case 405: GridShot("3-game-school-spells"); step = 406; at = now + 1.5f; return;
+            case 406: GridStart(); step = 407; at = now + 2f; return;
+            case 407: GridStep("custom corner", customCorner); step = 408; at = now + 1.5f; return;
+            case 408: GridShot("4-custom-corner-open"); step = 409; at = now + 1.5f; return;
+            case 409: GridStep("custom selector", customSelector); step = 410; at = now + 1.5f; return;
+            case 410: GridShot("5-custom-school-spells"); step = 411; at = now + 1.5f; return;
+            case 411:
+                if (shotCam != null) UnityEngine.Object.Destroy(shotCam.gameObject);
+                Grid().enabled = true;
+                step = 99; at = now + 1f; return;
+
             case 200:   // the effects gallery: a solo session, a dummy to aim at
                 if ((Safety.Context != PlayContext.Solo || Players.LocalFighter == null) && ++waits < 30) { at = now + 3f; return; }
                 Bots.SpawnDummy();
@@ -422,6 +442,86 @@ internal static class SpellProbe
             ("game-smoke", () => SpellFx.GameEffect("SmokeBombExplodeFX", p, 1f, 3f), 0.4f),
             ("game-flame", () => SpellFx.GameEffect("GoutOfFlame", p + Vector3.up, 1f, 3f), 0.4f),
         };
+    }
+
+    static Camera shotCam;
+    static GestureSpell topCorner, gameSelector, customCorner, customSelector;
+
+    static GestureMagicSystem Grid() => GM.instance.GetComponentInChildren<GestureMagicSystem>(true);
+
+    static string NodeName(GestureSpell x) => x == null ? "-" : $"{x.transform.parent.name}/{(x.Spell == SpellType.None ? x.name : (ModContent.SpellById((int)x.Spell)?.Key ?? x.Spell.ToString()))}";
+
+    static void GridStart()
+    {
+        var g = Grid();
+        try { g.ManualStart(); } catch (Exception e) { Log($"grid: ManualStart threw {e.InnerException?.Message ?? e.Message}"); }
+        if (!g.gameObject.activeSelf) g.gameObject.SetActive(true);
+        g.enabled = true;
+        try { g.Expand(); } catch (Exception e) { Log($"grid: Expand threw {e.InnerException?.Message ?? e.Message}"); }
+        // Fully open, then hold still: with no hand on the wand (flat), the grid's own LateUpdate would
+        // fold it away before the picture is taken. Its stroke fades run on their own components.
+        try { typeof(GestureMagicSystem).GetMethod("SetExpansion", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(g, new object[] { 1f }); }
+        catch (Exception e) { Log($"grid: SetExpansion threw {e.InnerException?.Message ?? e.Message}"); }
+        g.enabled = false;
+        var openers = g.StartingSpells.ToArray().ToList();
+        topCorner = openers.FirstOrDefault(o => o.transform.parent.name == "TopRight");
+        // A bottom corner holding a custom branch and no school the player owns.
+        customCorner = openers.FirstOrDefault(o => o.LeadsToSpells.ToArray().Any(x => x != null && x.transform.parent.name.Contains("(arcana.")) && o.transform.parent.name.StartsWith("Bottom"))
+                       ?? openers.FirstOrDefault(o => o.LeadsToSpells.ToArray().Any(x => x != null && x.transform.parent.name.Contains("(arcana.")));
+        gameSelector = topCorner?.LeadsToSpells.ToArray().FirstOrDefault(x => x != null && x.transform.parent.name == "Fire");
+        customSelector = customCorner?.LeadsToSpells.ToArray().FirstOrDefault(x => x != null && x.transform.parent.name.Contains("(arcana."));
+        Log($"grid: active {g.gameObject.activeInHierarchy}, at {g.transform.position}, scale {g.transform.lossyScale}, nodes {g.AllSpells.Count}, " +
+            $"live [{string.Join(", ", g.ActivelyCastingSpells.ToArray().Select(NodeName))}]; game corner {NodeName(topCorner)}, custom corner {NodeName(customCorner)}, " +
+            $"game selector {NodeName(gameSelector)}, custom selector {NodeName(customSelector)}");
+    }
+
+    static void GridStep(string what, GestureSpell node)
+    {
+        var g = Grid();
+        if (node == null) { Log($"grid: no {what} to draw"); return; }
+        var done = typeof(GestureMagicSystem).GetMethod("DoSpellCompleted", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        try { done.Invoke(g, new object[] { node }); } catch (Exception e) { Log($"grid: drawing {what} threw {e.InnerException?.Message ?? e.Message}"); }
+        Log($"grid: drew the {what} {NodeName(node)} -> live [{string.Join(", ", g.ActivelyCastingSpells.ToArray().Select(NodeName))}]");
+    }
+
+    // Photographs the grid with a camera of our own (the flat camera belongs to the game), and
+    // records what each live node actually shows: objects on, renderers on, label alpha and text.
+    static void GridShot(string name)
+    {
+        var g = Grid();
+        var rends = g.GetComponentsInChildren<Renderer>(false).Where(r => r != null && r.enabled).ToList();
+        if (rends.Count == 0) { Log($"grid shot {name}: nothing renders under the grid"); }
+        var b = rends.Count > 0 ? rends[0].bounds : new Bounds(g.transform.position, Vector3.one);
+        foreach (var r in rends) b.Encapsulate(r.bounds);
+        if (shotCam == null)
+        {
+            var go = new GameObject("ApiProbeCamera");
+            shotCam = go.AddComponent<Camera>();
+            shotCam.depth = 100;
+            shotCam.nearClipPlane = 0.01f;
+            shotCam.fieldOfView = 60f;
+            shotCam.clearFlags = CameraClearFlags.SolidColor;
+            shotCam.backgroundColor = new Color(0.08f, 0.08f, 0.1f);
+        }
+        var main = Camera.main;
+        var toViewer = main != null ? (main.transform.position - b.center) : -g.transform.forward;
+        toViewer = Vector3.ProjectOnPlane(toViewer, Vector3.up).sqrMagnitude > 0.01f ? toViewer.normalized : -g.transform.forward;
+        float dist = Mathf.Max(0.6f, b.extents.magnitude * 2.2f);
+        shotCam.transform.position = b.center + toViewer * dist;
+        shotCam.transform.LookAt(b.center);
+        Shots.Take("grid-" + name);
+        // The numbers behind the picture.
+        foreach (var x in g.ActivelyCastingSpells.ToArray().Where(x => x != null))
+        {
+            var rs = x.GetComponentsInChildren<Renderer>(true);
+            int on = rs.Count(r => r.enabled && r.gameObject.activeInHierarchy);
+            var labels = (x.SpellLabels?.ToArray() ?? new SpellLabel[0]).Where(l => l != null)
+                .Select(l => $"{(l.gameObject.activeInHierarchy ? "on" : "off")} a={(l.canvasGroup != null ? l.canvasGroup.alpha : -1):0.00} '{l.SpellNameText?.text}'/'{l.LabelText?.text}' icon={(l.IconSprite?.sprite != null ? l.IconSprite.sprite.name : "-")}");
+            var gest = x.Gestures?.ToArray().Where(m => m != null).Select(m => $"{(m.gameObject.activeInHierarchy ? "on" : "off")} fade={m.fadeAlpha:0.00}") ?? Enumerable.Empty<string>();
+            Log($"grid shot {name}: {NodeName(x)} active {x.gameObject.activeInHierarchy}, renderers on {on}/{rs.Length}, unlocked {x.Unlocked}, viable {x.isCurrentlyViablePath()}, " +
+                $"strokes [{string.Join(" ", gest)}], labels [{string.Join("; ", labels)}]");
+        }
+        Log($"grid shot {name}: grid bounds {b.center} size {b.size}, {rends.Count} renderers on, camera at {shotCam.transform.position}");
     }
 
     // A/B in one run: the release's state (grafted spells missing from the openers' PotentialSpells)

@@ -25,6 +25,7 @@ internal static class RuneTree
         public GameObject Copy;
         public GestureSpell Opener, Selector;
         public GestureSpell[] Nodes;
+        public List<SpellLabel> Previews = new();
     }
 
     static readonly Dictionary<string, Branch> branches = new();
@@ -78,6 +79,11 @@ internal static class RuneTree
         try
         {
             b.Opener?.LeadsToSpells?.Remove(b.Selector);
+            foreach (var l in b.Previews)
+            {
+                b.Opener?.SpellLabels?.Remove(l);
+                if (l != null) UnityEngine.Object.Destroy(l.gameObject);
+            }
             foreach (var n in b.Nodes)
             {
                 gms.AllSpells.Remove(n);
@@ -119,26 +125,50 @@ internal static class RuneTree
             else if (n.Spell == s2) n.Spell = c2.Type;
             else if (n.Spell == SpellType.None) selClone = n;
         }
-        foreach (var l in clone.GetComponentsInChildren<SpellLabel>(true))
-        {
-            if (l.skillMode && l.skillType == hostSchool) l.SetSkill(d.Type);
-            else if (l.spell == s1) l.SetSpell(c1.Type);
-            else if (l.spell == s2) l.SetSpell(c2.Type);
-        }
+        // Labels show only while the player holds their skillType (GestureSpell.Activate: a label with
+        // a skillType is switched on exactly when HasSkill(skillType)), so every label in the copy must
+        // name the custom school, not the game school it was copied from.
+        foreach (var l in clone.GetComponentsInChildren<SpellLabel>(true)) Retarget(l, hostSchool, s1, s2, d, c1, c2);
         if (selClone is null) { UnityEngine.Object.Destroy(clone); return null; }
 
         opener.LeadsToSpells.Add(selClone);
+        // The corner's own preview tiles (the icons beside each corner before anything is drawn) are
+        // labels on the opener, one per game spell in that corner. Copy the borrowed school's tiles
+        // into the same slots for the custom spells; they show while the player holds the custom
+        // school, as the originals do for theirs (and the originals stay hidden: never held here).
+        var previews = new List<SpellLabel>();
+        foreach (var l in opener.SpellLabels.ToArray())
+        {
+            if (l == null || (l.spell != s1 && l.spell != s2)) continue;
+            var copy = UnityEngine.Object.Instantiate(l.gameObject, l.transform.parent, false).GetComponent<SpellLabel>();
+            copy.gameObject.name = l.gameObject.name + " (" + d.Key + ")";
+            copy.transform.localPosition = l.transform.localPosition;
+            copy.transform.localRotation = l.transform.localRotation;
+            copy.transform.localScale = l.transform.localScale;
+            Retarget(copy, hostSchool, s1, s2, d, c1, c2);
+            opener.SpellLabels.Add(copy);
+            previews.Add(copy);
+        }
         foreach (var n in nodes)
         {
             gms.AllSpells.Add(n);
             try { n.Init(); } catch (Exception e) { Diag.Warn($"content: rune node init: {e.Message}"); }
         }
         bool linked = selClone.LeadsToSpells != null && selClone.LeadsToSpells.ToArray().All(x => x is not null && x.transform.IsChildOf(clone.transform));
-        string line = $"school {d.Key}: drawn on the rune branch of {hostSchool} ({nodes.Length} nodes, linked {linked}); " +
+        string line = $"school {d.Key}: drawn on the rune branch of {hostSchool} ({nodes.Length} nodes, linked {linked}, {previews.Count} corner tiles); " +
                       $"{c1.Key} like {s1}, {c2.Key} like {s2}";
         Report.Add(line);
         Diag.Info("content: " + line);
-        return new Branch { School = d, Host = hostSchool, Copy = clone, Opener = opener, Selector = selClone, Nodes = nodes };
+        return new Branch { School = d, Host = hostSchool, Copy = clone, Opener = opener, Selector = selClone, Nodes = nodes, Previews = previews };
+    }
+
+    static void Retarget(SpellLabel l, SkillType hostSchool, SpellType s1, SpellType s2, CustomSchool d, CustomSpell c1, CustomSpell c2)
+    {
+        if (l == null) return;
+        if (l.skillMode && l.skillType == hostSchool) { l.SetSkill(d.Type); return; }
+        if (l.spell == s1) l.SetSpell(c1.Type);
+        else if (l.spell == s2) l.SetSpell(c2.Type);
+        if (l.skillType == hostSchool) l.skillType = d.Type;
     }
 
     // For the probe: which branch a school is drawn on now, if any.
