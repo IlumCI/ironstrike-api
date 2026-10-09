@@ -159,6 +159,14 @@ internal static class SpellProbe
                 Log("branches now: " + string.Join(", ", ModContent.Schools.Select(sc => $"{sc.Key}->{RuneTree.HostOf(sc.Key)?.ToString() ?? "none"}")));
                 var hosts = ModContent.Schools.Select(sc => RuneTree.HostOf(sc.Key)).Where(h => h != null).ToList();
                 Log($"distinct {hosts.Distinct().Count() == hosts.Count}, none on an owned school {hosts.All(h => !Players.LocalFighter.skills.ContainsKey(h.Value))}");
+                // What the grid itself decides (its unlock pass is private): with only custom schools held,
+                // every corner holding one of them must light up.
+                var gms31 = GM.instance.GetComponentInChildren<GestureMagicSystem>(true);
+                var consider = typeof(GestureMagicSystem).GetMethod("ConsiderEnablingSpells", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                consider?.Invoke(gms31, null);
+                foreach (var op in gms31.StartingSpells.ToArray())
+                    Log($"opener {op.transform.parent.name}: unlocked {op.Unlocked}, reaches {op.PotentialSpells?.Count} spells " +
+                        $"({op.PotentialSpells?.ToArray().Count(x => x != null && ModContent.SpellById((int)x.Spell) != null)} custom)");
                 DumpTree();
                 step = 4; at = now + 2f; return;
 
