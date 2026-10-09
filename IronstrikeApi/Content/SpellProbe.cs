@@ -149,11 +149,19 @@ internal static class SpellProbe
                 foreach (var sc in ModContent.Schools) ModContent.GiveSchool(null, sc.Key, 1);
                 step = 30; at = now + 3f; return;
 
-            case 30:    // every custom school gets a free branch of its own
+            case 30:    // the user's own situation: game schools in the top corners, custom ones beside them
+                foreach (var t in new[] { SkillType.FireMagic, SkillType.StormMagic, SkillType.LightMagic, SkillType.DivineMagic }) Loadout.GiveSkill(t, 1);
+                step = 32; at = now + 3f; return;
+
+            case 32:
                 Log("branches: " + string.Join(", ", ModContent.Schools.Select(sc => $"{sc.Key}->{RuneTree.HostOf(sc.Key)?.ToString() ?? "none"}")));
+                GridAB();
                 foreach (var sc in ModContent.Schools.Take(2)) Loadout.GiveSkill(sc.Runes, 1);
                 Log($"gave the player {string.Join(", ", ModContent.Schools.Take(2).Select(sc => sc.Runes))}");
                 step = 31; at = now + 3f; return;
+
+            case 33:
+                step = 31; return;
 
             case 31:    // ...and moves off a branch when the player takes its game school
                 Log("branches now: " + string.Join(", ", ModContent.Schools.Select(sc => $"{sc.Key}->{RuneTree.HostOf(sc.Key)?.ToString() ?? "none"}")));
@@ -414,6 +422,107 @@ internal static class SpellProbe
             ("game-smoke", () => SpellFx.GameEffect("SmokeBombExplodeFX", p, 1f, 3f), 0.4f),
             ("game-flame", () => SpellFx.GameEffect("GoutOfFlame", p + Vector3.up, 1f, 3f), 0.4f),
         };
+    }
+
+    // A/B in one run: the release's state (grafted spells missing from the openers' PotentialSpells)
+    // against the fix, each driven through the grid's own start-up and completion steps.
+    static void GridAB()
+    {
+        var g = GM.instance.GetComponentInChildren<GestureMagicSystem>(true);
+        var ours = g.AllSpells.ToArray().Where(x => x != null && ModContent.SpellById((int)x.Spell) != null).ToList();
+        var openers = g.StartingSpells.ToArray().ToList();
+        var removed = new System.Collections.Generic.List<(GestureSpell Op, GestureSpell N)>();
+        foreach (var op in openers)
+            foreach (var n in ours)
+                if (op.PotentialSpells != null && op.PotentialSpells.Contains(n)) { op.PotentialSpells.Remove(n); removed.Add((op, n)); }
+        Log($"grid A (as released): took {removed.Count} grafted spells back out of the openers' lists");
+        Chain("A as released");
+        foreach (var (op, n) in removed) op.PotentialSpells.Add(n);
+        Log($"grid B (fixed): put {removed.Count} back");
+        Chain("B fixed");
+    }
+
+    static void Chain(string label)
+    {
+        var g = GM.instance.GetComponentInChildren<GestureMagicSystem>(true);
+        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var done = typeof(GestureMagicSystem).GetMethod("DoSpellCompleted", flags);
+        string Active() => string.Join(", ", g.ActivelyCastingSpells.ToArray().Where(x => x != null).Select(x => $"{x.transform.parent.name}/{(x.Spell == SpellType.None ? x.name : (ModContent.SpellById((int)x.Spell)?.Key ?? x.Spell.ToString()))}"));
+        try { g.ManualStart(); } catch (Exception e) { Log($"grid {label}: ManualStart threw {e.InnerException?.Message ?? e.Message}"); }
+        Log($"grid {label}: after the grid's start-up, active: [{Active()}]");
+        foreach (var op in g.StartingSpells.ToArray())
+            Log($"grid {label}: corner {op.transform.parent.name}: unlocked {op.Unlocked}, viable {op.isCurrentlyViablePath()}, active {g.ActivelyCastingSpells.Contains(op)}");
+        // Walk one custom school whose corner holds no game school, through the game's own completion step.
+        var school = ModContent.Schools.FirstOrDefault(sc => RuneTree.HostOf(sc.Key) is SkillType h && h is SkillType.EarthMagic or SkillType.AlchemicalMagic or SkillType.MirrorMagic or SkillType.StarMagic or SkillType.LifeMagic or SkillType.ForestMagic or SkillType.IronMagic or SkillType.ShadowMagic or SkillType.CrystalMagic)
+                     ?? ModContent.Schools.First();
+        var nodes = g.AllSpells.ToArray().Where(x => x != null && x.transform.parent != null && x.transform.parent.name.Contains("(" + school.Key + ")")).ToList();
+        var sel = nodes.FirstOrDefault(x => x.Spell == SpellType.None);
+        var opener = g.StartingSpells.ToArray().FirstOrDefault(o => sel != null && o.LeadsToSpells.Contains(sel));
+        var spell = nodes.FirstOrDefault(x => x.Spell != SpellType.None);
+        Log($"grid {label}: walking {school.Key} (corner {opener?.transform.parent.name}, runes of {RuneTree.HostOf(school.Key)})");
+        if (opener == null || sel == null || spell == null) { Log($"grid {label}: branch incomplete"); return; }
+        try
+        {
+            done.Invoke(g, new object[] { opener });
+            Log($"grid {label}: opener drawn -> active [{Active()}]; selector viable {sel.isCurrentlyViablePath()}");
+            done.Invoke(g, new object[] { sel });
+            Log($"grid {label}: selector drawn -> active [{Active()}]; spell viable {spell.isCurrentlyViablePath()}, labels [" +
+                string.Join(",", (spell.SpellLabels?.ToArray() ?? new SpellLabel[0]).Select(l => $"{l?.SpellNameText?.text}/{(l?.IconSprite?.sprite != null ? l.IconSprite.sprite.name : "-")}")) + "]");
+            done.Invoke(g, new object[] { spell });
+            var cw = Caster();
+            Log($"grid {label}: spell drawn -> casting {cw?.CastingSpellType}, local {cw?.CastingSpellLocal?.spellType} ({ModContent.SpellById((int)(cw?.CastingSpellType ?? 0))?.Key}), stage {cw?.CastingSpellLocal?.stage}");
+            cw?.ClearSpell();
+        }
+        catch (Exception e) { Log($"grid {label}: walking threw {e.InnerException?.Message ?? e.Message}"); }
+    }
+
+    // The VR casting path, checked through the grid's own code: its unlock pass, its per-frame
+    // viability check, the labels, and finishing a spell's runes.
+    static void GridCheck(string when)
+    {
+        var g = GM.instance.GetComponentInChildren<GestureMagicSystem>(true);
+        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        typeof(GestureMagicSystem).GetMethod("ConsiderEnablingSpells", flags)?.Invoke(g, null);
+        var me = Players.LocalFighter;
+        var held = new System.Collections.Generic.List<string>();
+        foreach (var kv in me.skills) held.Add(ModContent.SchoolById((int)kv.Key)?.Key ?? kv.Key.ToString());
+        Log($"grid [{when}]: player holds {string.Join(", ", held)}");
+        foreach (var op in g.StartingSpells.ToArray())
+        {
+            var pot = op.PotentialSpells?.ToArray() ?? new GestureSpell[0];
+            int custom = pot.Count(x => x != null && ModContent.SpellById((int)x.Spell) != null);
+            int customUnlocked = pot.Count(x => x != null && x.Unlocked && ModContent.SpellById((int)x.Spell) != null);
+            int gameUnlocked = pot.Count(x => x != null && x.Unlocked && x.Spell != SpellType.None && ModContent.SpellById((int)x.Spell) == null);
+            Log($"grid [{when}]: corner {op.transform.parent.name}: unlocked {op.Unlocked}, viable {op.isCurrentlyViablePath()}; reaches {pot.Length} " +
+                $"({custom} custom, {customUnlocked} custom unlocked, {gameUnlocked} game unlocked)");
+        }
+        foreach (var sc in ModContent.Schools)
+        {
+            var nodes = g.AllSpells.ToArray().Where(x => x != null && x.transform.parent != null && x.transform.parent.name.Contains("(" + sc.Key + ")")).ToList();
+            var sel = nodes.FirstOrDefault(x => x.Spell == SpellType.None);
+            var opener = g.StartingSpells.ToArray().FirstOrDefault(o => sel != null && o.LeadsToSpells.Contains(sel));
+            if (sel == null) { Log($"grid [{when}]: {sc.Key}: no branch"); continue; }
+            Log($"grid [{when}]: {sc.Key}: corner {opener?.transform.parent.name} unlocked {opener?.Unlocked} viable {opener?.isCurrentlyViablePath()}, " +
+                $"selector unlocked {sel.Unlocked} viable {sel.isCurrentlyViablePath()}, spells " +
+                string.Join(" | ", nodes.Where(x => x.Spell != SpellType.None).Select(x =>
+                    $"{ModContent.SpellById((int)x.Spell)?.Key} unlocked {x.Unlocked} viable {x.isCurrentlyViablePath()} labels [" +
+                    string.Join(",", (x.SpellLabels?.ToArray() ?? new SpellLabel[0]).Select(l => $"{l?.SpellNameText?.text}/{(l?.IconSprite?.sprite != null ? l.IconSprite.sprite.name : "-")}")) + "]")));
+        }
+        // Finishing a custom spell's runes: what the grid does when the last stroke is drawn.
+        var target = g.AllSpells.ToArray().FirstOrDefault(x => x != null && ModContent.SpellById((int)x.Spell) != null && x.Unlocked);
+        var cw = Caster();
+        if (target != null && cw != null)
+        {
+            try
+            {
+                typeof(GestureMagicSystem).GetMethod("DoSpellCompleted", flags)?.Invoke(g, new object[] { target });
+                Log($"grid [{when}]: finished the runes of {ModContent.SpellById((int)target.Spell).Key} -> casting {cw.CastingSpellType}, local {cw.CastingSpellLocal?.spellType}, stage {cw.CastingSpellLocal?.stage}");
+                cw.LocalPlayerStartCasting(target.Spell);
+                Log($"grid [{when}]: LocalPlayerStartCasting({ModContent.SpellById((int)target.Spell).Key}) -> casting {cw.CastingSpellType}, local {cw.CastingSpellLocal?.spellType}, stage {cw.CastingSpellLocal?.stage}");
+                cw.ClearSpell();
+            }
+            catch (Exception e) { Log($"grid [{when}]: finishing runes threw {e.InnerException?.Message ?? e.Message}"); }
+        }
     }
 
     static void DumpTree()

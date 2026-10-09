@@ -78,7 +78,6 @@ internal static class RuneTree
         try
         {
             b.Opener?.LeadsToSpells?.Remove(b.Selector);
-            foreach (var n in b.Nodes) b.Opener?.PotentialSpells?.Remove(n);
             foreach (var n in b.Nodes)
             {
                 gms.AllSpells.Remove(n);
@@ -129,21 +128,13 @@ internal static class RuneTree
         if (selClone is null) { UnityEngine.Object.Destroy(clone); return null; }
 
         opener.LeadsToSpells.Add(selClone);
-        // The opener decides whether it is drawable from PotentialSpells, a flat list of every spell
-        // below it that GestureSpell.Init builds once, when the grid wakes at boot (its only caller).
-        // Without our spells in it, a player whose only schools in this corner are custom ones never
-        // sees the corner light up (verified: Unlocked = LeadsToUnlockedSpells() reads PotentialSpells).
-        var spellNodes = nodes.Where(n => n.Spell != SpellType.None).ToArray();
-        opener.PotentialSpells ??= new Il2CppSystem.Collections.Generic.List<GestureSpell>();
-        foreach (var n in spellNodes) if (!opener.PotentialSpells.Contains(n)) opener.PotentialSpells.Add(n);
         foreach (var n in nodes)
         {
             gms.AllSpells.Add(n);
             try { n.Init(); } catch (Exception e) { Diag.Warn($"content: rune node init: {e.Message}"); }
         }
         bool linked = selClone.LeadsToSpells != null && selClone.LeadsToSpells.ToArray().All(x => x is not null && x.transform.IsChildOf(clone.transform));
-        string line = $"school {d.Key}: drawn on the rune branch of {hostSchool} ({nodes.Length} nodes, linked {linked}, " +
-                      $"opener reaches {opener.PotentialSpells.Count} spells, selector {selClone.PotentialSpells?.Count ?? 0}); " +
+        string line = $"school {d.Key}: drawn on the rune branch of {hostSchool} ({nodes.Length} nodes, linked {linked}); " +
                       $"{c1.Key} like {s1}, {c2.Key} like {s2}";
         Report.Add(line);
         Diag.Info("content: " + line);
