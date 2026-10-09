@@ -45,7 +45,8 @@ Compatibility
 Known limitations
 =================
 
-* Custom content is off in Private Matches and on servers where players' content differs.
+* Custom content works in Private Matches only when every player has the same content (checked
+  automatically); otherwise it stays off for that match.
 * The rune grid's shapes are the game's: a custom school is drawn on the branch of a game school the
   player does not have, so its shapes can differ between runs. A player who holds all sixteen game
   schools has no free branch left for it.

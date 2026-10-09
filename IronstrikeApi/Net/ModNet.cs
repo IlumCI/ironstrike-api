@@ -179,9 +179,42 @@ public static class ModNet
 
     internal static void OnPlayerLeft(PlayerRef p) => Core.PlayerLeft(p.RawEncoded);
 
-    internal static void Reset() => Core.Reset();
+    internal static void Reset() { Core.Reset(); ContentVerified = hostSaysSame = lastSent = false; nextSend = 0f; }
 
-    internal static void Tick() => Core.Tick(transport.Bind());
+    // Custom content in a Private Match: on only while every player has identical content. The host
+    // knows (it hears every greeting) and tells the clients every couple of seconds and on change.
+    internal static bool ContentVerified { get; private set; }
+    static bool hostSaysSame, lastSent;
+    static float nextSend;
+    static NetChannel contentChannel;
+
+    internal static void Tick()
+    {
+        var t = transport.Bind();
+        Core.Tick(t);
+        if (t == null) { ContentVerified = false; return; }
+        contentChannel ??= MakeContentChannel();
+        bool same = Core.SameContentEverywhere(t);
+        if (t.IsServer)
+        {
+            ContentVerified = same;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (same != lastSent || now >= nextSend)
+            {
+                lastSent = same;
+                nextSend = now + 2f;
+                if (Core.PeerCount(t) > 0) contentChannel.Broadcast(new[] { (byte)(same ? 1 : 0) });
+            }
+        }
+        else ContentVerified = same && hostSaysSame;
+    }
+
+    static NetChannel MakeContentChannel()
+    {
+        var ch = Channel("ironstrikeapi.content");
+        ch.Received += m => { if (m.FromHost && m.Data.Length == 1) hostSaysSame = m.Data[0] == 1; };
+        return ch;
+    }
 
     // NetworkRunner's own receive path, before the data is handed to the game's callbacks (whose
     // OnReliableDataReceived is empty). Packets that are ours stop here; anything else goes on.

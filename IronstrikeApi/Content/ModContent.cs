@@ -15,9 +15,9 @@ namespace IronstrikeApi;
 /// players compare a fingerprint of it when their mods greet each other. Content registered later,
 /// or only when a setting is on, gets a different fingerprint and switches custom content off for
 /// that session.</para>
-/// <para>Custom content works in solo games and on modded servers (Ironstrike Servers), where every
-/// player has the same mods. In a vanilla Private Match it is off: a player without your mod could
-/// not show, sync or even load it.</para>
+/// <para>Custom content works in solo games, on modded servers (Ironstrike Servers), and in Private
+/// Matches where every player has the same content. If anyone in a Private Match lacks it, it stays
+/// off for everybody: a player without your mod could not show, sync or even load it.</para>
 /// </remarks>
 public static class ModContent
 {
@@ -118,11 +118,13 @@ public static class ModContent
     public static CustomSkill GetSkill(string key) => key != null && skills.TryGetValue(key, out var s) ? s : null;
 
     /// <summary>
-    /// True while custom content is active: solo, or a modded server where every player has the same
-    /// content. False in Private Matches and public games, and after a content mismatch.
+    /// True while custom content is active: solo, a modded server, or a Private Match in which every
+    /// player has the same content (checked when their mods greet each other). False in public games,
+    /// when anyone in a Private Match lacks the mods, and after a content mismatch.
     /// </summary>
     public static bool Active =>
-        !Mismatch && Safety.Context is PlayContext.Offline or PlayContext.Solo or PlayContext.ModdedServer;
+        !Mismatch && (Safety.Context is PlayContext.Offline or PlayContext.Solo or PlayContext.ModdedServer
+                      || (Safety.Context == PlayContext.PrivateMatch && ModNet.ContentVerified));
 
     /// <summary>True if a player in this session has different content; content is off until it ends.</summary>
     public static bool Mismatch { get; internal set; }

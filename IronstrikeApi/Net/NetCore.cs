@@ -38,6 +38,8 @@ internal sealed class NetCore
     static readonly byte[] Magic = { (byte)'I', (byte)'S', (byte)'M', (byte)'A' };
 
     readonly HashSet<int> greeted = new();                 // host: clients that greeted back
+    readonly HashSet<int> sameContent = new();             // host: clients whose content fingerprint matches ours
+    bool hostSameContent;                                  // client: the host's fingerprint matches ours
     readonly Dictionary<int, float> greetAt = new();       // host: next greeting due
     readonly Dictionary<int, int> tries = new();
     readonly Dictionary<uint, (float Start, int Count)> sendRate = new();
@@ -55,6 +57,17 @@ internal sealed class NetCore
     public Action<string> Info = _ => { }, Warn = _ => { };
 
     public int Dropped { get; private set; }
+
+    // Host: every other player in the session greeted with the same content fingerprint (true when
+    // alone). A player without the API never greets, so it never counts as the same.
+    // Client: the host greeted with the same fingerprint (whether everyone else did is the host's to say).
+    public bool SameContentEverywhere(INetTransport t)
+    {
+        if (t == null) return false;
+        if (!t.IsServer) return hostGreeted && hostSameContent;
+        foreach (int id in t.Players) if (id != t.LocalId && !sameContent.Contains(id)) return false;
+        return true;
+    }
     public int PeerCount(INetTransport t) => t != null && t.IsServer ? greeted.Count : hostGreeted ? 1 : 0;
     public bool IsPeer(int id) => greeted.Contains(id);
     public bool HostGreeted => hostGreeted;
@@ -138,6 +151,7 @@ internal sealed class NetCore
     {
         // A rejoining (or reused) id starts over: it has to greet back again.
         greeted.Remove(id);
+        sameContent.Remove(id);
         recvRate.Remove(id);
         if (t == null || !t.IsServer || id == t.LocalId) return;
         greetAt[id] = Clock();
@@ -147,6 +161,7 @@ internal sealed class NetCore
     public void PlayerLeft(int id)
     {
         greeted.Remove(id);
+        sameContent.Remove(id);
         greetAt.Remove(id);
         tries.Remove(id);
         recvRate.Remove(id);
@@ -155,10 +170,12 @@ internal sealed class NetCore
     public void Reset()
     {
         greeted.Clear();
+        sameContent.Clear();
         greetAt.Clear();
         tries.Clear();
         recvRate.Clear();
         hostGreeted = false;
+        hostSameContent = false;
         hostId = int.MinValue;
     }
 
@@ -223,7 +240,10 @@ internal sealed class NetCore
             var theirs = new byte[b.Length - Header];
             Buffer.BlockCopy(b, Header, theirs, 0, theirs.Length);
             var ours = Manifest() ?? Array.Empty<byte>();
-            if (!theirs.AsSpan().SequenceEqual(ours)) ManifestMismatch?.Invoke(t.IsServer ? from : origin);
+            bool same = theirs.AsSpan().SequenceEqual(ours);
+            if (!same) ManifestMismatch?.Invoke(t.IsServer ? from : origin);
+            if (t.IsServer) { if (same) sameContent.Add(from); else sameContent.Remove(from); }
+            else hostSameContent = same;
             if (t.IsServer)
             {
                 if (greeted.Add(from))

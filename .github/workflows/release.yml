@@ -30,6 +30,14 @@ jobs:
       - name: Package
         run: ./package.sh
 
+      # The example spell pack, as a ready-to-install zip next to the API's.
+      - name: Package Arcana
+        run: |
+          dotnet build examples/Arcana/Arcana.csproj -c Release --nologo
+          mkdir -p arcana-pkg/BepInEx/plugins
+          cp examples/Arcana/bin/Release/net6.0/Arcana.dll arcana-pkg/BepInEx/plugins/
+          (cd arcana-pkg && zip -r ../dist/Arcana-1.0.0.zip BepInEx)
+
       - name: Resolve tag
         id: t
         run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
@@ -41,6 +49,6 @@ jobs:
           gh release create "${{ steps.t.outputs.tag }}" dist/*.zip \
             --title "${{ steps.t.outputs.tag }}" \
             --notes-file .github/RELEASE_NOTES.md \
-            --latest \
+            --prerelease \
             --repo "$GITHUB_REPOSITORY" || \
           gh release upload "${{ steps.t.outputs.tag }}" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"

@@ -1,13 +1,19 @@
-The shared modding API for IRONSTRIKE.
+The shared modding API for IRONSTRIKE. **0.2.0 is a prerelease for testing.**
 
-**Install:** BepInEx 6 IL2CPP **be.788**, then drop `BepInEx/plugins/IronstrikeApi.dll` (from the zip) into your game's `BepInEx/plugins/`. Mods built on the API need it; everyone on a modded server needs the same set.
+**New in 0.2:** mods can add content to the game itself: new skills on the upgrade screen, new magic schools for casters (three stages, enhanced versions) and the spells they teach, cast from the wand's rune grid, with an effects engine built on the game's own visuals.
 
-**For players:** a **MODS** button on the main menu's Credits card (or F8) opens the Mods window: every installed mod, its version and its settings, editable in VR.
+**Arcana** (`Arcana-1.0.0.zip`) is the example spell pack: Lightning Magic (Chain Lightning, Thunderstorm), Sky Magic (Air Strike, Orbital Laser), Death Magic (Raise Dead, Life Drain), Mind Magic (Telekinesis, Kinetic Ward) and Plague Magic (Plague Cloud, Pestilence). Casters find them on the upgrade screen; each is drawn on the rune branch of a game school you don't own, labelled with its own names and icons.
 
-**For modders:** reference `IronstrikeApi.dll` (the zip includes `IronstrikeApi.xml`, so your IDE shows the docs) and add `[BepInDependency("eu.euroswarms.ironstrike.api")]`. The docs site is built by CI (the `docs-html` artifact); start with the tutorial.
+**Install:** BepInEx 6 IL2CPP **be.788**, then unzip `IronstrikeApi-0.2.0.zip` (and `Arcana-1.0.0.zip` for the spells) into the game folder so the DLLs land in `BepInEx/plugins/`.
 
-Public matchmaking is locked while the API is loaded, as the game's developer asked. Gameplay changes made through the API apply only in solo games, private matches and modded servers.
+**Playing together:** custom skills and spells work solo, on modded servers, and in Private Matches where **every** player has the same mods and versions. If anyone in the match lacks them, they switch off for everybody (the log says so).
 
-**Known issues:** verified against the game build before the October 7, 2026 update; re-checking against the new build is pending. Played flat, a mod window whose page is only text or a table may not appear when opened in front of the player (menu-opened windows and settings pages are fine).
+**For players:** a **MODS** button on the main menu's Credits card (or F8) opens the Mods window: every installed mod, its version and its settings.
+
+**For modders:** reference `IronstrikeApi.dll` (the zip includes `IronstrikeApi.xml`) and add `[BepInDependency("eu.euroswarms.ironstrike.api")]`. Start with the docs' "New skills, magic schools and spells" guide.
+
+Public matchmaking is locked while the API is loaded, as the game's developer asked.
+
+**Not yet verified:** drawing a custom school's runes in VR, and two players with custom content in one match. Please report how both go.
 
 **Docs:** https://ilumci.github.io/ironstrike-api/

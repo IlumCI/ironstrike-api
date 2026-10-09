@@ -278,3 +278,49 @@ public class SpellRegistryTests : IDisposable
         Assert.Equal(8f, CustomSpell.At(v, 7));
     }
 }
+
+public class PrivateMatchContentTests
+{
+    static SimNet Net(params (int Id, byte Fingerprint, bool HasApi)[] players)
+    {
+        var net = new SimNet();
+        foreach (var p in players) net.Add(p.Id);
+        foreach (var p in players)
+        {
+            var b = p.Fingerprint;
+            net.Nodes[p.Id].Core.Manifest = () => new byte[] { b, b, b, b, b, b, b, b };
+            if (!p.HasApi) net.Nodes[p.Id].Core.Allowed = () => false;   // never answers a greeting
+        }
+        net.Pump();
+        return net;
+    }
+
+    [Fact]
+    public void Everyone_with_the_same_content_turns_it_on_everywhere()
+    {
+        var net = Net((1, 7, true), (2, 7, true), (3, 7, true));
+        Assert.All(net.Nodes.Values, n => Assert.True(n.Core.SameContentEverywhere(n)));
+    }
+
+    [Fact]
+    public void One_player_with_different_content_keeps_it_off_at_the_host()
+    {
+        var net = Net((1, 7, true), (2, 7, true), (3, 9, true));
+        Assert.False(net.Host.Core.SameContentEverywhere(net.Host));
+        Assert.False(net.Nodes[3].Core.SameContentEverywhere(net.Nodes[3]));
+    }
+
+    [Fact]
+    public void A_player_without_the_api_keeps_it_off_at_the_host()
+    {
+        var net = Net((1, 7, true), (2, 7, true), (3, 0, false));
+        Assert.False(net.Host.Core.SameContentEverywhere(net.Host));
+    }
+
+    [Fact]
+    public void Hosting_alone_is_verified()
+    {
+        var net = Net((1, 7, true));
+        Assert.True(net.Host.Core.SameContentEverywhere(net.Host));
+    }
+}

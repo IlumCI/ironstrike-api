@@ -280,9 +280,11 @@ Rules
 * **Everyone needs the same content.** Players' mods compare a fingerprint of all registered
   content when they greet each other. If it differs, custom content switches off for that session
   (the log says so), so nobody sees a skill or spell another player's game cannot show.
-* **Solo and modded servers only.** In Private Matches a player without your mod could not load the
-  content, so it is off there; in public games the API is locked out anyway
-  (:ref:`howto-safety`). :cs:prop:`~IronstrikeApi.ModContent.Active` says whether it is on.
+* **Where it works.** Solo games, modded servers, and Private Matches in which every player has the
+  same content: the host checks every player's fingerprint and tells the others. If anyone in a
+  Private Match lacks your mod, custom content stays off for everybody. In public games the API is
+  locked out anyway (:ref:`howto-safety`). :cs:prop:`~IronstrikeApi.ModContent.Active` says whether
+  it is on.
 * **Keys** are lower-case, with your mod's prefix: ``mymod.bloodlust``.
 * A hook that throws is logged with your mod's name. After five failures the skill or spell switches
   off for the rest of the game; the game itself carries on.
